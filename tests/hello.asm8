@@ -1,0 +1,37 @@
+/ Output string to TTY
+*10
+STPTR,	STRNG - 1
+
+*200
+LOOP,	CLA CLL
+	TAD I STPTR
+	SNA
+	HLT
+	JMS OUT1
+	JMP LOOP
+
+OUT1,	0
+	TSF
+	JMP .-1
+	TLS
+	JMP I OUT1
+
+*220
+STRNG,	"H
+	"e
+	"l
+	"l
+	"o
+	",
+	" 
+	"w
+	"o
+	"r
+	"l
+	"d
+	"!
+	015
+	012
+	0
+
+
