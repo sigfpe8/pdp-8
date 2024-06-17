@@ -819,10 +819,11 @@ int load_bin(FILE *inp, FILE *out, UNUSED FILE *err)
 		if (byte1 & 0x40) {	/* New address */
 			addr = ((byte1 & 0x3F) << 6) | byte2;
 			if (addr < first) first = addr;
-			if (addr > last) last = addr;
+			// printf("*%05o\n", addr);
 		} else {			/* New data */
 			code = (byte1 << 6) | byte2;
-			//printf("%04o  %04o\n", addr, code);
+			if (addr > last) last = addr;
+			// printf("%05o  %04o\n", addr, code);
 			MP[addr] = code;
 			++addr;
 			++nlocs;
@@ -1054,7 +1055,7 @@ static void symb_init(void)
 /*
 	Disassemble 1 instruction
 		Input:  addr, inst
-		Output: label, name, args
+		Output: label, name, args, ascii
 */
 void cpu_disasm(DINSTR *pd)
 {
@@ -1064,7 +1065,40 @@ void cpu_disasm(DINSTR *pd)
 	int opcode = pd->inst >> 9;
 
 	pd->name[0] = 0;
+	pd->ascii[4] = 0;
+
+	// Label (address)
 	sprintf(pd->label,"%04o",pd->addr);	/* In the future this could be a symbol */
+	// ASCII characters
+	if ((inst < 0400) && (inst & 0200)) {
+		/* Possibly an ASCII constant */
+		int code = inst - 0200; /* Remove mark bit */
+		pd->ascii[0] = '\'';
+		if (code == 127) { pd->ascii[1] = 'R'; pd->ascii[2] = 'O'; }	/* Rubout */
+		else if (code < 32) { /* Control */
+			pd->ascii[1] = '\\';
+			pd->ascii[3] = '\'';
+			switch (code) {
+			case '\t': pd->ascii[2] = 't'; break;
+			case '\f': pd->ascii[2] = 'f'; break;
+			case '\n': pd->ascii[2] = 'n'; break;
+			case '\r': pd->ascii[2] = 'r'; break;
+			default:   pd->ascii[1] = '^'; pd->ascii[2] = code + 64; break;
+			}
+		} else { pd->ascii[1] = code; pd->ascii[2] = '\''; pd->ascii[3] = ' '; } /* Printable ASCII */
+	} else {
+		pd->ascii[0] = '"'; pd->ascii[3] = '"';
+		int byte1 = (inst >> 6) & 077;
+		int byte2 = inst & 077;
+		if (byte1 <= 032) pd->ascii[1] = byte1 + '@';
+		else if (byte1 <= 037) pd->ascii[1] = byte1 + '[';
+		else pd->ascii[1] = byte1;
+
+		if (byte2 <= 032) pd->ascii[2] = byte2 + '@';
+		else if (byte2 <= 037) pd->ascii[2] = byte2 + '[';
+		else pd->ascii[2] = byte2;
+	}
+	// Instruction name and arguments
 	if (opcode < 6) {
 		strcpy(pd->name,main_opcodes[opcode].name);
 		if (inst & PAGE_BIT)	/* Current page */

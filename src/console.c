@@ -340,12 +340,9 @@ static int deposit(int argc, char *argv[])
 static int examine(int argc, char *argv[])
 {
 	WORD addr;
-	WORD code;
 	size_t count;
-	int byte1, byte2;
 	DINSTR inst;
 	FILE *out;
-	char ascii[5];	/* "XY" or 'A' or '\n' */
 	WORD args[MAXARGS+1];
 
 	if (argc == 4) {
@@ -370,42 +367,12 @@ static int examine(int argc, char *argv[])
 
 	fprintf(out,"\n");
 
-	ascii[4] = 0;
-
 	while (count--) {
 		inst.addr = addr;
 		inst.inst = MP[addr];
 		cpu_disasm(&inst);
-		if (((code = MP[addr]) < 0400) && (code & 0200)) {
-			/* Possibly an ASCII constant */
-			code -= 0200; /* Remove mark bit */
-			ascii[0] = '\'';
-			if (code == 127) { ascii[1] = 'R'; ascii[2] = 'O'; }	/* Rubout */
-			else if (code < 32) { /* Control */
-				ascii[1] = '\\';
-				ascii[3] = '\'';
-				switch (code) {
-				case '\t': ascii[2] = 't'; break;
-				case '\f': ascii[2] = 'f'; break;
-				case '\n': ascii[2] = 'n'; break;
-				case '\r': ascii[2] = 'r'; break;
-				default:   ascii[1] = '^'; ascii[2] = code + 64; break;
-				}
-			} else { ascii[1] = code; ascii[2] = '\''; ascii[3] = ' '; } /* Printable ASCII */
-		} else {
-			ascii[0] = '"'; ascii[3] = '"';
-			byte1 = (code >> 6) & 077;
-			byte2 = code & 077;
-			if (byte1 <= 032) ascii[1] = byte1 + '@';
-			else if (byte1 <= 037) ascii[1] = byte1 + '[';
-			else ascii[1] = byte1;
-
-			if (byte2 <= 032) ascii[2] = byte2 + '@';
-			else if (byte2 <= 037) ascii[2] = byte2 + '[';
-			else ascii[2] = byte2;
-		}
 		fprintf(out, "%05o:%s %04o  %s  %s%s%s\n", addr, (addr == PC ? ">" : " "),
-			MP[addr], ascii,
+			MP[addr], inst.ascii,
 			inst.name, (strlen(inst.name) > 8 ? "" : "\t"), inst.args);
 		++addr;
 	}

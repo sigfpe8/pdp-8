@@ -127,6 +127,7 @@ typedef struct {
 	char label[16];
 	char name[64];
 	char args[16];
+	char ascii[5];	/* "XY" or 'A' or '\n' */
 	WORD addr;
 	WORD inst;
 } DINSTR;
