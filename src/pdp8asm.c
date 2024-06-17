@@ -798,7 +798,7 @@ int load_asm(FILE *inp, UNUSED FILE *out, UNUSED FILE *err)
 	See "PDP-8 Family Paper Tape System User's Guide"
 	File binldr_wu.pdf
 */
-int load_bin(FILE *inp, FILE *out, UNUSED FILE *err)
+int load_bin(FILE *inp, FILE *out, FILE *err)
 {
 	int byte1, byte2;
 	int addr;
@@ -824,6 +824,14 @@ int load_bin(FILE *inp, FILE *out, UNUSED FILE *err)
 			code = (byte1 << 6) | byte2;
 			if (addr > last) last = addr;
 			// printf("%05o  %04o\n", addr, code);
+			if (out) {	// Disassemble to out?
+				DINSTR inst;
+				inst.addr = addr;
+				inst.inst = code;
+				cpu_disasm(&inst);
+				fprintf(out, "%05o:  %04o  %s  %s %s\n",
+					addr, code, inst.ascii, inst.name, inst.args);
+			}
 			MP[addr] = code;
 			++addr;
 			++nlocs;
@@ -833,13 +841,13 @@ int load_bin(FILE *inp, FILE *out, UNUSED FILE *err)
 
 	while (byte1 == 0x80) byte1 = fgetc(inp);
 
-	fprintf(out,"Read %d locations\n", nlocs);
-	fprintf(out, "Addresses: %04o-%04o\n", first, last);
+	fprintf(err,"Read %d locations\n", nlocs);
+	fprintf(err, "Addresses: %04o-%04o\n", first, last);
 
 	return 0;
 }
 
-int load_rim(FILE *inp, UNUSED FILE *out, UNUSED FILE *err)
+int load_rim(FILE *inp, UNUSED FILE *out, FILE *err)
 {
 	int byte1, byte2;
 	int addr;
@@ -857,7 +865,7 @@ int load_rim(FILE *inp, UNUSED FILE *out, UNUSED FILE *err)
 		byte2 = fgetc(inp);
 		code = (byte1 << 6) | byte2;
 
-		printf("%04o  %04o\n", addr, code);
+		fprintf(err, "%04o  %04o\n", addr, code);
 		MP[addr] = code;
 		byte1 = fgetc(inp);
 	}
@@ -867,7 +875,7 @@ int load_rim(FILE *inp, UNUSED FILE *out, UNUSED FILE *err)
 	return 0;
 }
 
-int load_txt(FILE *inp, FILE *out, FILE *err)
+int load_txt(FILE *inp, UNUSED FILE *out, FILE *err)
 {
 	char line[128];
 	int addr, data;
@@ -884,17 +892,17 @@ int load_txt(FILE *inp, FILE *out, FILE *err)
 		if (!*line || *line == '/') continue;
 		/* Read only two octal numbers; ignore the rest of the line */
 		if (sscanf(line, "%o %o", &addr, &data) != 2) {
-			fprintf(err,"Error at line %d: '%s'\n",nlines,line);
+			fprintf(err, "Error at line %d: '%s'\n", nlines, line);
 			return 0;
 		}
 		if (addr >= MAXMEM) {
-			fprintf(err,"Error at line %d: '%s'\n",nlines,line);
-			fprintf(err,"Address field too big: %o\n", addr);
+			fprintf(err, "Error at line %d: '%s'\n", nlines, line);
+			fprintf(err, "Address field too big: %o\n", addr);
 			return 0;
 		}
 		if (data >= MAXMEM) {
-			fprintf(err,"Error at line %d: '%s'\n",nlines,line);
-			fprintf(err,"Data field too big: %o\n", data);
+			fprintf(err, "Error at line %d: '%s'\n", nlines, line);
+			fprintf(err, "Data field too big: %o\n", data);
 			return 0;
 		}
 		if (addr < first) first = addr;
@@ -902,8 +910,8 @@ int load_txt(FILE *inp, FILE *out, FILE *err)
 		MP[addr] = data;
 	}
 
-	fprintf(out, "Read %d locations\n", nlines);
-	fprintf(out, "Addresses: %04o-%04o\n", first, last);
+	fprintf(err, "Read %d locations\n", nlines);
+	fprintf(err, "Addresses: %04o-%04o\n", first, last);
 
 	return 0;
 }
@@ -1105,7 +1113,16 @@ void cpu_disasm(DINSTR *pd)
 			addr = (pd->addr & PAGE_MASK) | (inst & OFF_MASK);
 		else					/* Page 0 */
 			addr = inst & OFF_MASK;
-		sprintf(pd->args,"%s%04o", (inst & INDIR_BIT ? "I " : ""), addr);
+		// Use relative address if nearby
+		int off = (int)addr - (int)pd->addr;
+		if (off >= -7 && off < 0)
+			sprintf(pd->args,"%s.%d", (inst & INDIR_BIT ? "I " : ""), off);
+		else if (off == 0)
+			sprintf(pd->args,"%s.", (inst & INDIR_BIT ? "I " : ""));
+		else if (off > 0 && off <= 8)
+			sprintf(pd->args,"%s.+%o", (inst & INDIR_BIT ? "I " : ""), off);
+		else
+			sprintf(pd->args,"%s%04o", (inst & INDIR_BIT ? "I " : ""), addr);
 	} else if (opcode == 6) {
 		int dev = (inst >> 3) & 077;
 		int fun = inst & 07;

@@ -423,23 +423,39 @@ static int help(int argc, char *argv[])
 	return 0;
 }
 
-#define	FILEFMT_ASM		1	/* macro-8 assembler source */
+#define	FILEFMT_ASM		1	// macro-8 assembler source
 #define	FILEFMT_BIN		2
 #define	FILEFMT_RIM		3
-#define	FILEFMT_TXT		4	/* Text version of RIM: <addr> <code> */
+#define	FILEFMT_TXT		4	// Text version of RIM: <addr> <code>
+
+#define FILELEN_MAX		256	// Max filename length
 
 static int load(int argc, char *argv[])
 {
 	FILE *inp;
+	FILE *out = 0;	// Default: don't disassemble
+	int disasm = 0;
+	size_t len;
 	char *sep;
+	char *file_inp;
+	char file_out[FILELEN_MAX+5];	// basename(<file_inp>).lst
 	int ffmt;
 
-	if (argc != 2) {
-		printf("'load' takes 1 argument: <filename>\n");
+	if (argc == 2)			// load <filename>
+		file_inp = argv[1];
+	else if (argc == 3) {	// load -d <filename>  // (debug/disassemble)
+		if (strcmp(argv[1], "-d")) {
+			printf("Invalid option: %s\n", argv[1]);
+			return 0;
+		}
+		disasm = 1;
+		file_inp = argv[2];
+	} else {
+		printf("load [-d] <filename>\n");
 		return 0;
 	}
 
-	if ((sep = strrchr(argv[1], '.')) && strlen(sep+1) < 5) {
+	if ((sep = strrchr(file_inp, '.')) && strlen(sep+1) < 5) {
 		if (!strcmp(sep+1,"asm8"))
 			ffmt = FILEFMT_ASM;
 		else if (!strcmp(sep+1,"bin"))
@@ -452,7 +468,14 @@ static int load(int argc, char *argv[])
 			printf("Unknown file extension\n");
 			return 0;
 		}
-	} else if ((sep = strrchr(argv[1], '-'))) {
+		if (disasm) {
+			if ((len = sep - file_inp) > FILELEN_MAX) {
+				printf("Filename is too long\n");
+				return 0;
+			}
+			memcpy(file_out, file_inp, len);
+		}
+	} else if ((sep = strrchr(file_inp, '-'))) {
 		if (!strcmp(sep+1,"pb"))
 			ffmt = FILEFMT_BIN;
 		else if (!strcmp(sep+1,"pm"))
@@ -461,27 +484,46 @@ static int load(int argc, char *argv[])
 			printf("Unknown file type\n");
 			return 0;
 		}
+		if (disasm) {
+			if ((len = strlen(file_inp)) > FILELEN_MAX) {
+				printf("Filename is too long\n");
+				return 0;
+			}
+			memcpy(file_out, file_inp, len);
+		}
 	}
 
-	if (!(inp = fopen(argv[1],"r"))) {
-		printf("Could not open '%s'\n", argv[1]);
+	if (!(inp = fopen(file_inp,"r"))) {
+		printf("Could not open '%s' for input\n", file_inp);
 		return 0;
+	}
+
+	if (disasm) {
+		strcpy(file_out + len, ".lst");
+		if (!(out = fopen(file_out,"w"))) {
+			printf("Could not open '%s' for output\n", file_out);
+			fclose(inp);
+			return 0;
+		}
+		printf("Disassembling to '%s'\n", file_out);
 	}
 
 	switch (ffmt) {
 	case FILEFMT_ASM:
-		load_asm(inp,stdout,stderr);
+		load_asm(inp,out,stderr);
 		break;
 	case FILEFMT_BIN:
-		load_bin(inp,stdout,stderr);
+		load_bin(inp,out,stderr);
 		break;
 	case FILEFMT_RIM:
-		load_rim(inp,stdout,stderr);
+		load_rim(inp,out,stderr);
 		break;
 	case FILEFMT_TXT:
-		load_txt(inp,stdout,stderr);
+		load_txt(inp,out,stderr);
 		break;
 	}
+
+	if (out && out != stdout) fclose(out);
 
 	fclose(inp);
 
