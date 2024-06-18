@@ -1108,7 +1108,11 @@ void cpu_disasm(DINSTR *pd)
 	}
 	// Instruction name and arguments
 	if (opcode < 6) {
+		// Opcode
 		strcpy(pd->name,main_opcodes[opcode].name);
+		// Add indirection bit to opcode
+		if (inst & INDIR_BIT)
+			strcat(pd->name," I");
 		if (inst & PAGE_BIT)	/* Current page */
 			addr = (pd->addr & PAGE_MASK) | (inst & OFF_MASK);
 		else					/* Page 0 */
@@ -1116,13 +1120,13 @@ void cpu_disasm(DINSTR *pd)
 		// Use relative address if nearby
 		int off = (int)addr - (int)pd->addr;
 		if (off >= -7 && off < 0)
-			sprintf(pd->args,"%s.%d", (inst & INDIR_BIT ? "I " : ""), off);
+			sprintf(pd->args,".%d", off);
 		else if (off == 0)
-			sprintf(pd->args,"%s.", (inst & INDIR_BIT ? "I " : ""));
+			sprintf(pd->args,".");
 		else if (off > 0 && off <= 8)
-			sprintf(pd->args,"%s.+%o", (inst & INDIR_BIT ? "I " : ""), off);
+			sprintf(pd->args,".+%o", off);
 		else
-			sprintf(pd->args,"%s%04o", (inst & INDIR_BIT ? "I " : ""), addr);
+			sprintf(pd->args,"%04o", addr);
 	} else if (opcode == 6) {
 		int dev = (inst >> 3) & 077;
 		int fun = inst & 07;

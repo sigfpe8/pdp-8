@@ -119,10 +119,16 @@ void con_trace(WORD lastPC)
 	printf("PC=%04o [%04o] %s%s%s\t L=%d  AC=%04o  MQ=%04o\r\n",
 		lastPC, IR, inst.name, (strlen(inst.name) > 8 ? "" : "\t"), inst.args, L, AC, MQ);
 #else
-	traceb += fprintf(tracef, "PC=%05o [%04o] %s%s%s\t L=%d  AC=%04o  IF=%d  DF=%d  IB=%d  IEN=%d  IREQ=%08llx\r\n",
-		lastPC, IR, inst.name, (strlen(inst.name) > 8 ? "" : "\t"), inst.args, L, AC,
+	traceb += fprintf(tracef, "PC=%05o [%04o] ", lastPC, IR);
+	if (inst.args[0])
+		traceb += fprintf(tracef, "%-8s %-8s", inst.name, inst.args);
+	else
+		traceb += fprintf(tracef, "%-16s ", inst.name);
+	
+	traceb += fprintf(tracef, "L=%d  AC=%04o  IF=%d  DF=%d  IB=%d  MA=%05o IEN=%d  IREQ=%08llx\r\n",
+		L, AC,
 		IF>>12, DF>>12, IB>>12,
-		IEN, IREQ);
+		MA, IEN, IREQ);
 	if (traceb / (1024*1024) > 10) {
 		if (tracef != stdout) fclose(tracef);
 		tracef = stdout;
