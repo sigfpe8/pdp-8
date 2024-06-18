@@ -57,10 +57,11 @@ void cpu_run(
 {
 	WORD lastPC;
 	int keyb_delay;
+#define	KEYB_DELAY	100		// Check keyboard every 100 instructions
 
 	PC = addr;
 	RUN = 1;
-	keyb_delay = 100; /* Check keyboard every 100 instructions */
+	keyb_delay = KEYB_DELAY;
 
 	while (RUN) {
 		if (ION_delay) {
@@ -140,7 +141,7 @@ void cpu_run(
 		if (!--keyb_delay) {
 			tty_keyb_get_flag(3);
 			tty_out_set_flag(4,1);
-			keyb_delay = 1000;
+			keyb_delay = KEYB_DELAY;
 		}
 		if (IREQ && IEN && !ION_delay && !CIF_delay) {
 			/* Service interrupt */
@@ -508,6 +509,73 @@ void cpu_init(size_t kwords)
 	IEN = 0;
 	IREQ = 0;
 	trace = 0;
+
+//#define	DEBUG_XMEM
+#ifdef	DEBUG_XMEM
+/*
+/PROGRAM OPERATIONS NI MEMORY FIELD 2
+/INSTRUCTION FIELD = 2; DATA FIELD = 2
+/CALL A SUBROUTINE IN MEMORY FIELD 1
+/ INDICATE CALLING FIELD LOCATION BY THE CONTENTS OF THE DATA FIELD
+
+	FIELD	2
+
+	CIF 10			/ CHANGE TO INSTRUCTION FIELD 1 = 6212
+	JMS I SUBRP		/ SUBRP = ENTRY ADDRESS
+	CDF 20			/ RESTORE DATA FIELD
+	HLT
+SUBRP,	SUBR		/ POINTER
+					/ CALLED SUBROUTINE IN FIELD 1
+
+20200:  6212   CIF 10
+20201:  4604   JMS I       .+3
+20202:  6221   CDF 20
+20203:  7402   HLT 
+20204:  0100   SUBR
+
+	FIELD	1
+
+SUBR,	0			/ REETURN ADDRESS STORED HERE
+	CLA
+	RDF				/ READ DATA FIELD INTO AC
+	TAD RETURN		/ AC = 6202 + DATA FIELD BITS
+	DCA	EXIT		/ STORE INSTRUCTION SUBROUTINE
+					/ NOW CHANGE DATA FIELD IF DESIRED
+
+EXIT,	0			/ A CIF INSTRUCTION
+	JMP I	SUBR
+RETURN,	CIF			/ USED TO CALCULATE EXIT INSTRUCTION
+
+10100:  0000   AND 0000
+10101:  7200   CLA 
+10102:  6214   RDF
+10103:  1107   TAD .+4
+10104:  3105   DCA .+1
+10105:  0000   AND 0000
+10106:  5500   JMP I       .-6
+10107:  6202   CIF 00
+*/
+
+	if (HAVE_EMEM) {
+		MP[020200]=06212;
+		MP[020201]=04604;
+		MP[020202]=06221;
+		MP[020203]=07402;
+		MP[020204]=00100;
+
+		MP[010100]=00000;
+		MP[010101]=07200;
+		MP[010102]=06214;
+		MP[010103]=01107;
+		MP[010104]=03105;
+		MP[010105]=00000;
+		MP[010106]=05500;
+		MP[010107]=06202;
+
+		DF = IF = 2 << 12;
+		PC = 020200;
+	}
+#endif
 }
 
 void cpu_stop(void)

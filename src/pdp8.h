@@ -22,7 +22,7 @@ typedef unsigned char BIT;
 #define	GET_LINK		((AC & LINK_MASK) >> LINK_SHFT)
 #define	SET_LINK		((AC | (L << LINK_SHFT)))
 #define	ALU_ADD(r,v)	{ r += (v); L ^= (r >> LINK_SHFT); r &= WORD_MASK; }
-#define	PC_INC()		PC = (PC + 1) & WORD_MASK;
+#define	PC_INC()		PC = (PC & FIELD_MASK) | ((PC + 1) & WORD_MASK);
 #define	ALU_INC(r)		ALU_ADD(r,1)
 
 
