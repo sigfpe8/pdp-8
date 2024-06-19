@@ -204,42 +204,23 @@ static void input_output(void)
 	   several devices (20 to 27).
 	*/
 	if (HAVE_EMEM && ((IR & 07700) == 06200)) {	/* 62NX */
-//		int field = (IR & 00070) << 9;
 		int field = (IR & 00070) >> 3;
 		switch (IR & 7) {
 		case 1:	/* CDF = 62N1 */
-#if	1
 			if (field < nfields)
 				DF = field << 12;
-#else
-		if ((field>>12) >= nfields) printf("Invalid DF=%d (nfields=%d) @ PC=%05o\r\n",field>>12,nfields,PC-1);
-			DF = field;
-#endif
 			break;
 		case 2:	/* CIF = 62N2 */
-#if	1
 			if (field < nfields) {
 				IB = field << 12;
 				CIF_delay = 1;
 			}
-#else
-		if ((field>>12) >= nfields) printf("Invalid IF=%d (nfields=%d) @ PC=%05o\r\n",field>>12,nfields,PC-1);
-			IB = field;
-			CIF_delay = 1;
-#endif
 			break;
 		case 3:	/* CDI = 62N3 = CDF | CIF */
-#if	1
 			if (field < nfields) {
 				DF = IB = field << 12;
 				CIF_delay = 1;
 			}
-#else
-		if ((field>>12) >= nfields) printf("Invalid DF and IF=%d (nfields=%d) @ PC=%05o\r\n",field>>12,nfields,PC-1);
-			DF = field;
-			IB = field;
-			CIF_delay = 1;
-#endif
 			break;
 		case 4:
 			switch ((IR & 070) >> 3) {
@@ -250,7 +231,7 @@ static void input_output(void)
 				AC = (AC & 07707) | (IF >> 9);
 				break;
 			case 3:	/* RIB = 6234 */
-				AC = SF;
+				AC = (AC & 7600) | SF;
 				break;
 			case 4:	/* RMF = 6244 */
 				IB = (SF & 00070) << 9;
@@ -263,11 +244,42 @@ static void input_output(void)
 
 	switch(dev) {
 	case 000:	/* CPU */
-		if (fun == 1)		/* ION = 6001 */
-			ION_delay = 1;	/* Delay 1 instruction */
-		else if (fun == 2) {/* IOF = 6002 */
-			IEN = 0;
-			ION_delay = 0;
+		switch (fun) {
+			case 0:	// SKON = 6000 skip if interrupt is ON and turn OFF
+				if (IEN) PC_INC();
+				IEN = 0;
+				ION_delay = 0;
+				break;
+			case 1: // ION  = 6001 turn interrupt ON
+				ION_delay = 1;	// Delay 1 instruction
+				break;			
+			case 2: // IOF  = 6002 turn interrupt OFF
+				IEN = 0;
+				ION_delay = 0;
+				break;
+			case 3: // SRQ  = 6003 skip if interrupt request
+				if (IREQ) PC_INC();
+				break;
+			case 4: // GTF  = 6004 get flags
+				//   0   1   2   3   4   5   6   7   8   9  10  11
+				// +---+---+---+---+---+---+---+---+---+---+---+---+
+				// | L |GT |INT|NIT|ION|SUF|SF0|SF1|SF2|SF3|SF4|SF5|
+				// +---+---+---+---+---+---+---+---+---+---+---+---+
+				AC = (L << 11) | (IEN << 7) | (SF & 077);
+				break;
+			case 5: // RTF  = 6005 restore flags
+				L = AC >> 11;
+				SF = AC & 077;
+				if (AC & 0200) ION_delay = 1;	// ION
+				else {							// IOF
+					IEN = 0;
+					ION_delay = 0;
+				}
+				break;
+			case 6: // SGT  = 6006 skip on Greater Than flag
+				break;
+			case 7: // CAF  = 6007 clear all flags
+				break;
 		}
 		break;
 	case 001:	/* High speed paper tape reader */
