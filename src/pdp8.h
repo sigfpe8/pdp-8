@@ -134,8 +134,11 @@ typedef struct {
 
 /* Implemented by pdp8cpu.c */
 extern void	cpu_init(size_t kwords);
+extern void cpu_deinit(void);
 extern void	cpu_run(WORD addr, WORD count);
 extern void cpu_ireq(int dev, int updown);
+extern void log_close(void);
+extern void log_open(void);
 
 /* Implemented by pdp8asm.c */
 extern void	cpu_disasm(DINSTR *pi);

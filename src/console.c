@@ -25,6 +25,7 @@ static int quit(int argc, char *argv[]);
 static int run(int argc, char *argv[]);
 static int set_acc(int argc, char *argv[]);
 static int set_link(int argc, char *argv[]);
+static int set_log(int argc, char *argv[]);
 static void set_signals(void);
 static int set_swt(int argc, char *argv[]);
 static int set_trace(int argc, char *argv[]);
@@ -40,21 +41,22 @@ typedef struct {
 } Command;
 
 Command cmdtable[] = {
-	{ "continue","",					"Continue",			cont		},
-	{ "deposit","<addr>",				"Deposit memory",	deposit		},
-	{ "examine","<addr> [<count>]",		"Examine memory", 	examine,	},
-	{ "help",	"",						"Display help",		help,		},
-	{ "quit",	"",						"Quit emulator",	quit,		},
-	{ "load",	"<file>",				"Load file",		load,		},
-	{ "run",	"<addr>",				"Run program",		run,		},
-	{ "sacc",	"<value>",				"Set ACC=value",	set_acc,	},
-	{ "shregs",	"",						"Show registers",	show_regs,	},
-	{ "si",		"",						"Single step",		single_step	},
-	{ "slink",	"0|1",					"Set L=0|1",		set_link,	},
-	{ "sswt",	"<value>",				"Set SR=value",		set_swt,	},
-	{ "trace",	"0|1 [<file>]",			"Set/toggle trace",	set_trace,	},
-	{ "?",		"",						"Display help",		help,		},
-	{	0,		0,						0,					0,			}
+	{ "continue","",					"Continue",				cont		},
+	{ "deposit","<addr>",				"Deposit memory",		deposit		},
+	{ "examine","<addr> [<count>]",		"Examine memory", 		examine,	},
+	{ "help",	"",						"Display help",			help,		},
+	{ "load",	"<file>",				"Load file",			load,		},
+	{ "log",    "0|1",                  "Start/stop logging",	set_log,	},
+	{ "quit",	"",						"Quit simulator",		quit,		},
+	{ "run",	"<addr>",				"Run program",			run,		},
+	{ "sacc",	"<value>",				"Set ACC=value",		set_acc,	},
+	{ "shregs",	"",						"Show registers",		show_regs,	},
+	{ "si",		"",						"Single step",			single_step	},
+	{ "slink",	"0|1",					"Set L=0|1",			set_link,	},
+	{ "sswt",	"<value>",				"Set SR=value",			set_swt,	},
+	{ "trace",	"0|1 [<file>]",			"Start/stop tracing",	set_trace,	},
+	{ "?",		"",						"Display help",			help,		},
+	{	0,		0,						0,						0,			}
 };
 
 static Command *find_command(char *name);
@@ -536,6 +538,28 @@ static int load(int argc, char *argv[])
 	return 0;
 }
 
+// log 0|1
+static int set_log(int argc, char *argv[])
+{
+	WORD args[MAXARGS+1];
+	int log = 0;
+
+	if (octal_args(argc, argv, args, 0, 1) < 0)
+		return 0;
+
+	if (argc == 2) {	// log 0|1
+		if (args[1]) {
+			log_open();
+			log = 1;
+		}
+		else
+			log_close();
+	}
+
+	printf("Logging is %s\n", log ? "ON" : "OFF");
+
+	return 0;
+}
 
 static int quit(int argc, char *argv[])
 {
@@ -647,18 +671,21 @@ static int set_trace(int argc, char *argv[])
 	if (octal_args(argc, argv, args, 0, 1) < 0)
 		return 0;
 
-	trace = !!args[1]; /* on/off */
-	if (trace) {
-		if (trace_file)
-			tracef = fopen(argv[2],"w");
-		if (!tracef) {
-			printf("Could not open trace file \"%s\"\n",argv[2]);
-			printf("Tracing to stdout\n");
-			tracef = stdout;
+	if (argc == 2) {	// trace 0|1
+		trace = !!args[1]; // on/off
+		if (trace) {
+			if (trace_file)
+				tracef = fopen(argv[2],"w");
+			if (!tracef) {
+				printf("Could not open trace file \"%s\"\n",argv[2]);
+				printf("Tracing to stdout\n");
+				tracef = stdout;
+			}
+			traceb = 0;
 		}
-		traceb = 0;
 	}
-	printf("Trace is %s\n", trace ? "ON" : "OFF");
+
+	printf("Tracing is %s\n", trace ? "ON" : "OFF");
 
 	return 0;
 }

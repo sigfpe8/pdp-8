@@ -3,6 +3,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <ctype.h>
+#include <time.h>
 
 #include "pdp8.h"
 #include "console.h"
@@ -50,6 +51,10 @@ static void input_output(void);
 static void operate(void);
 static void skip_group(void);
 static void eadd(WORD lastPC);
+
+// Log events
+#define	LOG_NOT_IMPLEMENTED		1
+static void log_event(WORD lastPC, WORD inst, int evnt);
 
 void cpu_run(
 	WORD addr,	/* Initial address */
@@ -203,20 +208,23 @@ static void input_output(void)
 	   Handle memory extension separately since it involves
 	   several devices (20 to 27).
 	*/
-	if (HAVE_EMEM && ((IR & 07700) == 06200)) {	/* 62NX */
+	if ((IR & 07700) == 06200) {	// 62NX
+		if (!HAVE_EMEM) return;
+
 		int field = (IR & 00070) >> 3;
-		switch (IR & 7) {
-		case 1:	/* CDF = 62N1 */
+
+		switch (fun) {
+		case 1:	// CDF = 62N1
 			if (field < nfields)
 				DF = field << 12;
 			break;
-		case 2:	/* CIF = 62N2 */
+		case 2:	// CIF = 62N2
 			if (field < nfields) {
 				IB = field << 12;
 				CIF_delay = 1;
 			}
 			break;
-		case 3:	/* CDI = 62N3 = CDF | CIF */
+		case 3:	// CDI = 62N3 = CDF | CIF
 			if (field < nfields) {
 				DF = IB = field << 12;
 				CIF_delay = 1;
@@ -224,20 +232,27 @@ static void input_output(void)
 			break;
 		case 4:
 			switch ((IR & 070) >> 3) {
-			case 1:	/* RDF = 6214 */
+			case 1:	// RDF = 6214
 				AC = (AC & 07707) | (DF >> 9);
 				break;
-			case 2:	/* RIF = 6224 */
+			case 2:	// RIF = 6224
 				AC = (AC & 07707) | (IF >> 9);
 				break;
-			case 3:	/* RIB = 6234 */
+			case 3:	// RIB = 6234
 				AC = (AC & 7600) | SF;
 				break;
-			case 4:	/* RMF = 6244 */
+			case 4:	// RMF = 6244
 				IB = (SF & 00070) << 9;
 				DF = (SF & 7) << 12;
 				break;
+			default:
+				log_event(PC-1, IR, LOG_NOT_IMPLEMENTED);
+				break;
 			}
+			break;
+		default:
+			log_event(PC-1, IR, LOG_NOT_IMPLEMENTED);
+			break;
 		}
 		return;
 	}
@@ -282,84 +297,94 @@ static void input_output(void)
 				break;
 		}
 		break;
-	case 001:	/* High speed paper tape reader */
+	case 001:	// High speed paper tape reader
+	case 002:	// High speed paper tape punch
+		log_event(PC-1, IR, LOG_NOT_IMPLEMENTED);
 		break;
-	case 002:	/* High speed paper tape punch */
-		break;
-	case 003:	/* Console keyboard (TTY) / low speed paper tape reader */
+	case 003:	// Console keyboard (TTY) / low speed paper tape reader
 		switch(fun) {
-		case 0: /* KCF = 6030 */
-			/* Clear keyboard/reader flag, do not start reader */
+		case 0: // KCF = 6030
+			// Clear keyboard/reader flag, do not start reader
 			tty_keyb_set_flag(dev, 0);
 			break;
-		case 1: /* KSF = 6031 */
-			/* Skip is keyboard/flag = 1 */
-			/* If next instruction is JMP .-1, wait until a key is pressed */
+		case 1: // KSF = 6031
+			// Skip is keyboard/flag = 1
+			// If next instruction is JMP .-1, wait until a key is pressed
 			if (cpu_is_jmpm1()) flag = tty_keyb_wait1(dev);
 			else flag = tty_keyb_get_flag(dev);
 			if (flag)
 				PC_INC();
 			break;
-		case 2: /* KCC = 6032 */
-			/* Clear AC and keyboard/reader flag, set reader run */
+		case 2: // KCC = 6032
+			// Clear AC and keyboard/reader flag, set reader run
 			AC = 0;
 			tty_keyb_set_flag(dev, 0);
 			break;
-		case 3: /* ??? = 6033 */
+		case 3: // ??? = 6033
+		case 4: // KRS = 6034
+			// Read keyboard/reader buffer static
+			log_event(PC-1, IR, LOG_NOT_IMPLEMENTED);
 			break;
-		case 4: /* KRS = 6034 */
-			/* Read keyboard/reader buffer static */
+		case 5: // KIE = 6035
+			// Interrrupt enable
+			log_event(PC-1, IR, LOG_NOT_IMPLEMENTED);
 			break;
-		case 5: /* KIE = 6035 */
-			/* Interrrupt enable */
-			break;
-		case 6: /* KRB = 6036 */
-			/* Clear AC, read keyboard buffer, clear keyboard flags */
+		case 6: // KRB = 6036
+			// Clear AC, read keyboard buffer, clear keyboard flags
 			AC = tty_keyb_inp1(dev);
 			break;
-		case 7: /* ??? = 6037 */
+		case 7: // ??? = 6037
+			log_event(PC-1, IR, LOG_NOT_IMPLEMENTED);
 			break;
 		}
 		break;
-	case 004:	/* Console output (TTY) / low speed paper tape punch */
+	case 004:	// Console output (TTY) / low speed paper tape punch
 		switch(fun) {
-		case 0: /* SPF = 6040 */
-			/* Set teleprinter/punch flag */
+		case 0: // SPF = 6040
+			// Set teleprinter/punch flag
 			tty_out_set_flag(dev, 1);
 			break;
-		case 1: /* TSF = 6041 */
-			/* Skip if teleprinter/punch flag is 1 */
+		case 1: // TSF = 6041
+			// Skip if teleprinter/punch flag is 1
 			//if (tty_out_get_flag(dev))
 				PC_INC();
 			break;
-		case 2: /* TCF = 6042 */
-			/* Clear teleprinter/punch flag */
+		case 2: // TCF = 6042
+			// Clear teleprinter/punch flag
 			tty_out_set_flag(dev, 0);
 			break;
-		case 3: /* ??? = 6043 */
+		case 3: // ??? = 6043
+			log_event(PC-1, IR, LOG_NOT_IMPLEMENTED);
 			break;
-		case 4: /* TPC = 6044 */
-			/* Output AC as 7-bit ASCII */
+		case 4: // TPC = 6044
+			// Output AC as 7-bit ASCII
 			tty_out1(dev, AC & 0x7F);
 			break;
-		case 5: /* SPI = 6045 */
+		case 5: // SPI = 6045
+			log_event(PC-1, IR, LOG_NOT_IMPLEMENTED);
 			break;
-		case 6: /* TLS = 6046 */
-			/* Clear teleprinter/punch flag */
-			/* Output AC as 7-bit ASCII */
+		case 6: // TLS = 6046
+			// Clear teleprinter/punch flag
+			// Output AC as 7-bit ASCII
 			tty_out1(dev, AC & 0x7F);
 			break;
-		case 7: /* ??? = 6047 */
+		case 7: // ??? = 6047
+			log_event(PC-1, IR, LOG_NOT_IMPLEMENTED);
 			break;
 		}
 		break;
-	case 010:	/* Memory parity (MP8/I) and Automatic Restart (KP8/I) */
-		if (fun == 1) { /* SMP = 6101 */
-			/* Skip if memory parity error flag = 0, ie, always */
+	case 010:	// Memory parity (MP8/I) and Automatic Restart (KP8/I)
+		if (fun == 1) { // SMP = 6101
+			// Skip if memory parity error flag = 0, ie, always
 			PC_INC();
+		} else {
+			log_event(PC-1, IR, LOG_NOT_IMPLEMENTED);
+			// SPL = 6102 = Skip if power low (never)
+			// CMP = 6104 = Clear memory parity flag (nop)
 		}
-		/* SPL = 6102 = Skip if power low (never) */
-		/* CMP = 6104 = Clear memory parity flag (nop) */
+		break;
+	default:
+		log_event(PC-1, IR, LOG_NOT_IMPLEMENTED);
 		break;
 	}
 }
@@ -404,6 +429,7 @@ static void operate(void)
 			AC |= SC;
 			break;
 		case 3:	/* NOP = 7461 */
+			log_event(PC-1, IR, LOG_NOT_IMPLEMENTED);
 			break;
 		case 4:	/* MQA = 7501 */
 			AC |= MQ;
@@ -414,8 +440,8 @@ static void operate(void)
 			MQ = temp;
 			break;
 		case 6:	/* NOP = 7541 */
-			break;
 		case 7:	/* NOP = 7561 */
+			log_event(PC-1, IR, LOG_NOT_IMPLEMENTED);
 			break;
 		}
 
@@ -443,6 +469,7 @@ static void operate(void)
 			PC_INC();
 			break;
 		case 4:		/* NMI = 7411 */
+			log_event(PC-1, IR, LOG_NOT_IMPLEMENTED);
 			break;
 		case 5:		/* SHL = 7413 */
 			count = MP[PC] + 1;
@@ -593,4 +620,72 @@ RETURN,	CIF			/ USED TO CALCULATE EXIT INSTRUCTION
 void cpu_stop(void)
 {
 	STOP = 1;
+}
+
+#define	LOG_BUFSIZE	128
+#define	LOG_FILE	"pdp8-log.txt"
+
+static FILE *logf = 0;
+static char last_msg[LOG_BUFSIZE] = { 0 };
+static int repeat = 0;
+
+// Log exceptional events, like unimplemented or invalid instructions
+static void log_event(WORD lastPC, WORD inst, int evnt)
+{
+	char this_msg[LOG_BUFSIZE];
+
+	if (!logf) return;	// Logging is not enabled
+
+	snprintf(this_msg, sizeof(this_msg), "%05o %04o %d", lastPC, inst, evnt);
+
+	if (strcmp(last_msg, this_msg)) {	// Message is different than last one
+		if (last_msg[0]) {	// If we are not starting, write last message
+			fprintf(logf, "%s\n", last_msg);
+			if (repeat)
+				fprintf(logf, "  repeated %d times\n", repeat+1);
+		}
+		strcpy(last_msg, this_msg);
+		repeat = 0;
+	} else {							// Message is repeated
+		++repeat;
+	}
+}
+
+void log_open(void)
+{
+	// Open log file if necessary
+	if (!logf) {
+		if (!(logf = fopen(LOG_FILE, "a"))) {
+			fprintf(stderr, "Could not open "LOG_FILE"\n");
+			return;
+		}
+		time_t now;
+		time(&now);
+		fprintf(logf, "----- Opened %s", ctime(&now));
+		last_msg[0] = 0;
+		repeat = 0;
+	}
+}
+
+void log_close(void)
+{
+	if (logf) {
+		// Flush last message
+		fprintf(logf, "%s\n", last_msg);
+		if (repeat)
+			fprintf(logf, "  repeated %d times\n", repeat+1);
+
+		time_t now;
+		time(&now);
+		fprintf(logf, "----- Closed %s", ctime(&now));
+		fclose(logf);
+		logf = 0;
+		last_msg[0] = 0;
+		repeat = 0;
+	}
+}
+
+void cpu_deinit(void)
+{
+	log_close();
 }

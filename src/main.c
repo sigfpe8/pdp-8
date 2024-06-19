@@ -51,6 +51,8 @@ badop:		fprintf(stderr,"Invalid option: %s\n", pc);
 
 	console();
 
+	cpu_deinit();
+	
 	return 0;
 }
 
