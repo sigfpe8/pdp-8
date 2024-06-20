@@ -109,19 +109,19 @@ void console(void)
 }
 
 /* Show last instruction that was executed + current state */
-void con_trace(WORD lastPC)
+void con_trace(WORD addr, WORD code)
 {
 	DINSTR inst;
 
-	inst.addr = lastPC;
-	inst.inst = IR;
+	inst.addr = addr;
+	inst.inst = code;
 	cpu_disasm(&inst);
 
 #if	0
 	printf("PC=%04o [%04o] %s%s%s\t L=%d  AC=%04o  MQ=%04o\r\n",
 		lastPC, IR, inst.name, (strlen(inst.name) > 8 ? "" : "\t"), inst.args, L, AC, MQ);
 #else
-	traceb += fprintf(tracef, "PC=%05o [%04o] ", lastPC, IR);
+	traceb += fprintf(tracef, "PC=%05o [%04o] ", addr, code);
 	if (inst.args[0])
 		traceb += fprintf(tracef, "%-8s %-8s", inst.name, inst.args);
 	else

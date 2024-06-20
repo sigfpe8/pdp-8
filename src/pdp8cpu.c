@@ -9,34 +9,37 @@
 #include "console.h"
 #include "tty.h"
 
-/* CPU state */
-WORD AC;	/* Accumulator */
-WORD L;		/* Link */
-WORD MQ;	/* Multiplier/Quotient register */
-WORD SC;	/* Step counter (5 bits) */
-WORD PC;	/* Program counter */
-WORD SR;	/* Switch register */
-WORD IR;	/* Instruction register */
-WORD MA;	/* Memory address register */
-WORD MB;	/* Memory buffer register */
+// CPU state
+WORD AC;	// Accumulator
+WORD L;		// Link
+WORD MQ;	// Multiplier/Quotient register
+WORD SC;	// Step counter (5 bits)
+WORD PC;	// Program counter
+WORD SR;	// Switch register
+WORD IR;	// Instruction register
+WORD MA;	// Memory address register
+WORD MB;	// Memory buffer register
 
-/* Memory extension registers */
-WORD IF;	/* Instruction field */
-WORD DF;	/* Data field */
-WORD IB;	/* Instruction buffer */
-WORD SF;	/* Save field */
+// Memory extension registers
+WORD IF;	// Instruction field
+WORD DF;	// Data field
+WORD IB;	// Instruction buffer
+WORD SF;	// Save field
 
-/* Various flip-flops */
-BIT RUN;		/* CPU is running */
-BIT STOP;		/* CTRL-C was pressed */
-BIT IEN;		/* Interrupt enable */
-BIT ION_delay;	/* Delay ION by 1 instruction */
-BIT CIF_delay;	/* Delay ION until next JMP/JMS */
+// Various flip-flops
+BIT RUN;		// CPU is running
+BIT STOP;		// CTRL-C was pressed
+BIT IEN;		// Interrupt enable
+BIT ION_delay;	// Delay ION by 1 instruction
+BIT CIF_delay;	// Delay ION until next JMP/JMS
 
-/* Interrupt request: 64 bits, 1 bit per device */
+// Auxiliary registers 
+WORD THISPC;	// Current PC before it's incremented
+
+// Interrupt request: 64 bits, 1 bit per device
 unsigned long long IREQ;
 
-WORD trace;	/* Trace execution? */
+WORD trace;	// Trace execution?
 
 /* Configuration */
 BIT HAVE_EAE;	/* Extended arithmetic element */
@@ -50,17 +53,16 @@ int nfields;	/* # of fields */
 static void input_output(void);
 static void operate(void);
 static void skip_group(void);
-static void eadd(WORD lastPC);
+static void eadd(void);
 
 // Log events
 #define	LOG_NOT_IMPLEMENTED		1
-static void log_event(WORD lastPC, WORD inst, int evnt);
+static void log_event(int evnt);
 
 void cpu_run(
 	WORD addr,	/* Initial address */
 	WORD count)	/* Number of instructions to run (0=until HLT) */
 {
-	WORD lastPC;
 	int keyb_delay;
 #define	KEYB_DELAY	100		// Check keyboard every 100 instructions
 
@@ -76,39 +78,39 @@ void cpu_run(
 
 		MA = PC;
 		IR = MB = MP[MA];
-		lastPC = PC;
+		THISPC = PC;
 		PC_INC();
 		switch (IR >> 9) {	/* Opcode */
 		case 0:	/* AND - Logical AND */
-			eadd(lastPC);
+			eadd();
 			MB = MP[MA];
 			AC &= MB;
 			break;
 		case 1:	/* TAD - Two's complement ADD */
-			eadd(lastPC);
+			eadd();
 			MB = MP[MA];
 			ALU_ADD(AC,MB);
 			break;
 		case 2:	/* ISZ - Increment and skip on zero */
-			eadd(lastPC);
+			eadd();
 			//ALU_INC(MP[MA]);
 			MP[MA] = (MP[MA] + 1) & WORD_MASK;
 			if (!MP[MA]) PC_INC();
 			break;
 		case 3:	/* DCA - Deposit and clear accumulator */
-			eadd(lastPC);
+			eadd();
 			MP[MA] = AC;
 			AC = 0;
 			break;
 		case 4:	/* JMS - Jump to subroutine */
-			eadd(lastPC);
+			eadd();
 			IF = IB;
 			MA = IF | (MA & WORD_MASK);
 			MP[MA] = PC & WORD_MASK;	/* Save return address (12 bits) */
 			PC = MA + 1;				/* Code begins at next word */
 			break;
 		case 5:	/* JMP - Jump */
-			eadd(lastPC);
+			eadd();
 			IF = IB;
 			PC = IF | (MA & WORD_MASK);
 			/* Detect hot loops of the form:
@@ -122,7 +124,7 @@ void cpu_run(
 				will have avoided a hot loop doing nothing by yielding the
 				CPU to the OS.
 			*/
-			if (PC == (lastPC - 2) && ((MP[lastPC-1] & 07400) == 07400)) {
+			if (PC == (THISPC - 2) && ((MP[THISPC-1] & 07400) == 07400)) {
 				tty_out_set_flag(4,1);
 				tty_keyb_timed_wait1(3);	/* Read 1 char for 0.5 sec */
 			}
@@ -135,7 +137,7 @@ void cpu_run(
 			break;
 		}
 		if (trace)
-			con_trace(lastPC);
+			con_trace(THISPC, IR);
 		if (STOP) {
 			con_stop();
 			RUN = 0;
@@ -172,10 +174,10 @@ void cpu_ireq(int dev, int updown)
 }
 
 /* Calculate effective memory address */
-static void eadd(WORD lastPC)
+static void eadd(void)
 {
 	if (IR & PAGE_BIT)	/* Use current page of current field */
-		MA = IF | (lastPC & PAGE_MASK) | (IR & OFF_MASK);
+		MA = IF | (THISPC & PAGE_MASK) | (IR & OFF_MASK);
 	else				/* Use page 0 of current field */
 		MA = IF | (IR & OFF_MASK);
 	
@@ -246,12 +248,12 @@ static void input_output(void)
 				DF = (SF & 7) << 12;
 				break;
 			default:
-				log_event(PC-1, IR, LOG_NOT_IMPLEMENTED);
+				log_event(LOG_NOT_IMPLEMENTED);
 				break;
 			}
 			break;
 		default:
-			log_event(PC-1, IR, LOG_NOT_IMPLEMENTED);
+			log_event(LOG_NOT_IMPLEMENTED);
 			break;
 		}
 		return;
@@ -299,7 +301,7 @@ static void input_output(void)
 		break;
 	case 001:	// High speed paper tape reader
 	case 002:	// High speed paper tape punch
-		log_event(PC-1, IR, LOG_NOT_IMPLEMENTED);
+		log_event(LOG_NOT_IMPLEMENTED);
 		break;
 	case 003:	// Console keyboard (TTY) / low speed paper tape reader
 		switch(fun) {
@@ -323,18 +325,18 @@ static void input_output(void)
 		case 3: // ??? = 6033
 		case 4: // KRS = 6034
 			// Read keyboard/reader buffer static
-			log_event(PC-1, IR, LOG_NOT_IMPLEMENTED);
+			log_event(LOG_NOT_IMPLEMENTED);
 			break;
 		case 5: // KIE = 6035
 			// Interrrupt enable
-			log_event(PC-1, IR, LOG_NOT_IMPLEMENTED);
+			log_event(LOG_NOT_IMPLEMENTED);
 			break;
 		case 6: // KRB = 6036
 			// Clear AC, read keyboard buffer, clear keyboard flags
 			AC = tty_keyb_inp1(dev);
 			break;
 		case 7: // ??? = 6037
-			log_event(PC-1, IR, LOG_NOT_IMPLEMENTED);
+			log_event(LOG_NOT_IMPLEMENTED);
 			break;
 		}
 		break;
@@ -354,14 +356,14 @@ static void input_output(void)
 			tty_out_set_flag(dev, 0);
 			break;
 		case 3: // ??? = 6043
-			log_event(PC-1, IR, LOG_NOT_IMPLEMENTED);
+			log_event(LOG_NOT_IMPLEMENTED);
 			break;
 		case 4: // TPC = 6044
 			// Output AC as 7-bit ASCII
 			tty_out1(dev, AC & 0x7F);
 			break;
 		case 5: // SPI = 6045
-			log_event(PC-1, IR, LOG_NOT_IMPLEMENTED);
+			log_event(LOG_NOT_IMPLEMENTED);
 			break;
 		case 6: // TLS = 6046
 			// Clear teleprinter/punch flag
@@ -369,7 +371,7 @@ static void input_output(void)
 			tty_out1(dev, AC & 0x7F);
 			break;
 		case 7: // ??? = 6047
-			log_event(PC-1, IR, LOG_NOT_IMPLEMENTED);
+			log_event(LOG_NOT_IMPLEMENTED);
 			break;
 		}
 		break;
@@ -378,13 +380,13 @@ static void input_output(void)
 			// Skip if memory parity error flag = 0, ie, always
 			PC_INC();
 		} else {
-			log_event(PC-1, IR, LOG_NOT_IMPLEMENTED);
+			log_event(LOG_NOT_IMPLEMENTED);
 			// SPL = 6102 = Skip if power low (never)
 			// CMP = 6104 = Clear memory parity flag (nop)
 		}
 		break;
 	default:
-		log_event(PC-1, IR, LOG_NOT_IMPLEMENTED);
+		log_event(LOG_NOT_IMPLEMENTED);
 		break;
 	}
 }
@@ -429,7 +431,7 @@ static void operate(void)
 			AC |= SC;
 			break;
 		case 3:	/* NOP = 7461 */
-			log_event(PC-1, IR, LOG_NOT_IMPLEMENTED);
+			log_event(LOG_NOT_IMPLEMENTED);
 			break;
 		case 4:	/* MQA = 7501 */
 			AC |= MQ;
@@ -441,7 +443,7 @@ static void operate(void)
 			break;
 		case 6:	/* NOP = 7541 */
 		case 7:	/* NOP = 7561 */
-			log_event(PC-1, IR, LOG_NOT_IMPLEMENTED);
+			log_event(LOG_NOT_IMPLEMENTED);
 			break;
 		}
 
@@ -469,7 +471,7 @@ static void operate(void)
 			PC_INC();
 			break;
 		case 4:		/* NMI = 7411 */
-			log_event(PC-1, IR, LOG_NOT_IMPLEMENTED);
+			log_event(LOG_NOT_IMPLEMENTED);
 			break;
 		case 5:		/* SHL = 7413 */
 			count = MP[PC] + 1;
@@ -630,13 +632,13 @@ static char last_msg[LOG_BUFSIZE] = { 0 };
 static int repeat = 0;
 
 // Log exceptional events, like unimplemented or invalid instructions
-static void log_event(WORD lastPC, WORD inst, int evnt)
+static void log_event(int evnt)
 {
 	char this_msg[LOG_BUFSIZE];
 
 	if (!logf) return;	// Logging is not enabled
 
-	snprintf(this_msg, sizeof(this_msg), "%05o %04o %d", lastPC, inst, evnt);
+	snprintf(this_msg, sizeof(this_msg), "%05o %04o %d", THISPC, IR, evnt);
 
 	if (strcmp(last_msg, this_msg)) {	// Message is different than last one
 		if (last_msg[0]) {	// If we are not starting, write last message
