@@ -3,7 +3,7 @@
 This is an old unfinished project of mine that had been dormant for a long time. Looking at it recently I decided to revive it and try to improve its functionality. My initial goal was, and still is, to be able to run the software Focal ("FOrmula CALculator") and perhaps, being a bit more ambitious, OS8, the time sharing operating system that ran on the PDP-8. Although the basic instruction set has been implemented, none of these goals have been achieved yet so this is still a work in progress.
 
 
-## How to build and run the emulator
+## How to build and run the simulator
 
 To build it:
 
@@ -23,7 +23,7 @@ Then, to run it:
 ```
 src % ./pdp8
 
-PDP-8 emulator version 0.1
+PDP-8 simulator version 0.2
 4K memory
 
 Virtual console
@@ -44,15 +44,16 @@ PDP-8 virtual console commands:
   deposit     <addr>                   Deposit memory
   examine     <addr> [<count>]         Examine memory
   help                                 Display help
-  quit                                 Quit emulator
   load        <file>                   Load file
+  log         0|1                      Start/stop logging
+  quit                                 Quit simulator
   run         <addr>                   Run program
   sacc        <value>                  Set ACC=value
   shregs                               Show registers
   si                                   Single step
   slink       0|1                      Set L=0|1
   sswt        <value>                  Set SR=value
-  trace       0|1 [<file>]             Set/toggle trace
+  trace       0|1 [<file>]             Start/stop tracing
   ?                                    Display help
 ```
 

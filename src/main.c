@@ -44,7 +44,7 @@ badop:		fprintf(stderr,"Invalid option: %s\n", pc);
 		}
 	}
 	
-	printf("\nPDP-8 emulator version %d.%d\n",MAJVER,MINVER);
+	printf("\nPDP-8 simulator version %d.%d\n",MAJVER,MINVER);
 	printf("%ldK memory\n", kwords);
 
 	cpu_init(kwords);
@@ -52,7 +52,7 @@ badop:		fprintf(stderr,"Invalid option: %s\n", pc);
 	console();
 
 	cpu_deinit();
-	
+
 	return 0;
 }
 

@@ -1,4 +1,5 @@
 #ifndef	_console_h
+#define _console_h
 
 /* Console public API */
 extern void	console(void);

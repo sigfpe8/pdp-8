@@ -1,8 +1,9 @@
 #ifndef	_pdp8_h
+#define _pdp8_h
 
-/* Emulator version 0.1 */
+/* Simulator version 0.2 */
 #define	MAJVER		0
-#define	MINVER		1
+#define	MINVER		2
 
 typedef unsigned int uint;
 typedef unsigned short WORD;

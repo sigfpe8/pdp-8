@@ -1,4 +1,5 @@
 #ifndef	_tty_h
+#define _tty_h
 
 /* TTY/ASR33 public API */
 extern void	tty_init(void);
