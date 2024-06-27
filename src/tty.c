@@ -1,7 +1,9 @@
 #include <stdio.h>
 #include <termios.h>
 #include <unistd.h>
+#include <sys/errno.h>
 
+#include "log.h"
 #include "tty.h"
 
 extern void cpu_ireq(int dev, int updown);
@@ -46,7 +48,7 @@ void tty_init(void)
 {
 	/* Save current settings */
 	if (tcgetattr(0, &orig_termios) == -1)	/* stdin */
-		perror("tcgetattr");
+		log_error(errno, "tcgetattr");
 
 	/* Prepare raw mode to emulate ASR33 */
 	asr33_termios = orig_termios;
@@ -77,7 +79,7 @@ static void tty_asr33_mode(int mode)
 		break;
 	}
 	if (tcsetattr(0, TCSAFLUSH, &asr33_termios) == -1)
-		perror("tcsetattr");
+		log_error(errno, "tcsetattr");
 
 	asr33_mode = mode;
 }
@@ -86,7 +88,7 @@ void tty_exit(void)
 {
 	if (asr33_mode) {
 		if (tcsetattr(0, TCSAFLUSH, &orig_termios) == -1)
-			perror("tcsetattr");
+			log_error(errno, "tcsetattr");
 
 		asr33_mode = 0;
 	}

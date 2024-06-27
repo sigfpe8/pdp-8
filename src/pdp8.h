@@ -111,8 +111,9 @@ extern BIT CIF_delay;/* Delay ION until next JMP/JMS */
 
 extern unsigned long long IREQ;	/* Interrupt request */
 
-extern WORD trace;	/* Trace execution? */
+extern WORD trace;	// Trace execution?
 extern WORD BP_NUM;	// Active breakpoint number
+extern WORD THISPC;	// Current PC before it's incremented
 
 /* Configuration */
 extern BIT HAVE_EAE;/* Extended arithmetic element */

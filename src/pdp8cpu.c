@@ -3,10 +3,10 @@
 #include <string.h>
 #include <stdlib.h>
 #include <ctype.h>
-#include <time.h>
 
 #include "pdp8.h"
 #include "console.h"
+#include "log.h"
 #include "tty.h"
 
 // CPU state
@@ -55,10 +55,6 @@ static void input_output(void);
 static void operate(void);
 static void skip_group(void);
 static void eadd(void);
-
-// Log events
-#define	LOG_NOT_IMPLEMENTED		1
-static void log_event(int evnt);
 
 void cpu_run(
 	WORD addr,	/* Initial address */
@@ -253,12 +249,12 @@ static void input_output(void)
 				DF = (SF & 7) << 12;
 				break;
 			default:
-				log_event(LOG_NOT_IMPLEMENTED);
+				log_invalid();
 				break;
 			}
 			break;
 		default:
-			log_event(LOG_NOT_IMPLEMENTED);
+			log_invalid();
 			break;
 		}
 		return;
@@ -306,7 +302,7 @@ static void input_output(void)
 		break;
 	case 001:	// High speed paper tape reader
 	case 002:	// High speed paper tape punch
-		log_event(LOG_NOT_IMPLEMENTED);
+		log_invalid();
 		break;
 	case 003:	// Console keyboard (TTY) / low speed paper tape reader
 		switch(fun) {
@@ -330,18 +326,18 @@ static void input_output(void)
 		case 3: // ??? = 6033
 		case 4: // KRS = 6034
 			// Read keyboard/reader buffer static
-			log_event(LOG_NOT_IMPLEMENTED);
+			log_invalid();
 			break;
 		case 5: // KIE = 6035
 			// Interrrupt enable
-			log_event(LOG_NOT_IMPLEMENTED);
+			log_invalid();
 			break;
 		case 6: // KRB = 6036
 			// Clear AC, read keyboard buffer, clear keyboard flags
 			AC = tty_keyb_inp1(dev);
 			break;
 		case 7: // ??? = 6037
-			log_event(LOG_NOT_IMPLEMENTED);
+			log_invalid();
 			break;
 		}
 		break;
@@ -361,14 +357,14 @@ static void input_output(void)
 			tty_out_set_flag(dev, 0);
 			break;
 		case 3: // ??? = 6043
-			log_event(LOG_NOT_IMPLEMENTED);
+			log_invalid();
 			break;
 		case 4: // TPC = 6044
 			// Output AC as 7-bit ASCII
 			tty_out1(dev, AC & 0x7F);
 			break;
 		case 5: // SPI = 6045
-			log_event(LOG_NOT_IMPLEMENTED);
+			log_invalid();
 			break;
 		case 6: // TLS = 6046
 			// Clear teleprinter/punch flag
@@ -376,7 +372,7 @@ static void input_output(void)
 			tty_out1(dev, AC & 0x7F);
 			break;
 		case 7: // ??? = 6047
-			log_event(LOG_NOT_IMPLEMENTED);
+			log_invalid();
 			break;
 		}
 		break;
@@ -385,13 +381,13 @@ static void input_output(void)
 			// Skip if memory parity error flag = 0, ie, always
 			PC_INC();
 		} else {
-			log_event(LOG_NOT_IMPLEMENTED);
+			log_invalid();
 			// SPL = 6102 = Skip if power low (never)
 			// CMP = 6104 = Clear memory parity flag (nop)
 		}
 		break;
 	default:
-		log_event(LOG_NOT_IMPLEMENTED);
+		log_invalid();
 		break;
 	}
 }
@@ -436,7 +432,7 @@ static void operate(void)
 			AC |= SC;
 			break;
 		case 3:	/* NOP = 7461 */
-			log_event(LOG_NOT_IMPLEMENTED);
+			log_invalid();
 			break;
 		case 4:	/* MQA = 7501 */
 			AC |= MQ;
@@ -448,7 +444,7 @@ static void operate(void)
 			break;
 		case 6:	/* NOP = 7541 */
 		case 7:	/* NOP = 7561 */
-			log_event(LOG_NOT_IMPLEMENTED);
+			log_invalid();
 			break;
 		}
 
@@ -476,7 +472,7 @@ static void operate(void)
 			PC_INC();
 			break;
 		case 4:		/* NMI = 7411 */
-			log_event(LOG_NOT_IMPLEMENTED);
+			log_invalid();
 			break;
 		case 5:		/* SHL = 7413 */
 			count = MP[PC] + 1;
@@ -627,69 +623,6 @@ RETURN,	CIF			/ USED TO CALCULATE EXIT INSTRUCTION
 void cpu_stop(void)
 {
 	STOP = 1;
-}
-
-#define	LOG_BUFSIZE	128
-#define	LOG_FILE	"pdp8-log.txt"
-
-static FILE *logf = 0;
-static char last_msg[LOG_BUFSIZE] = { 0 };
-static int repeat = 0;
-
-// Log exceptional events, like unimplemented or invalid instructions
-static void log_event(int evnt)
-{
-	char this_msg[LOG_BUFSIZE];
-
-	if (!logf) return;	// Logging is not enabled
-
-	snprintf(this_msg, sizeof(this_msg), "%05o %04o %d", THISPC, IR, evnt);
-
-	if (strcmp(last_msg, this_msg)) {	// Message is different than last one
-		if (last_msg[0]) {	// If we are not starting, write last message
-			fprintf(logf, "%s\n", last_msg);
-			if (repeat)
-				fprintf(logf, "  repeated %d times\n", repeat+1);
-		}
-		strcpy(last_msg, this_msg);
-		repeat = 0;
-	} else {							// Message is repeated
-		++repeat;
-	}
-}
-
-void log_open(void)
-{
-	// Open log file if necessary
-	if (!logf) {
-		if (!(logf = fopen(LOG_FILE, "a"))) {
-			fprintf(stderr, "Could not open "LOG_FILE"\n");
-			return;
-		}
-		time_t now;
-		time(&now);
-		fprintf(logf, "----- Opened %s", ctime(&now));
-		last_msg[0] = 0;
-		repeat = 0;
-	}
-}
-
-void log_close(void)
-{
-	if (logf) {
-		// Flush last message
-		fprintf(logf, "%s\n", last_msg);
-		if (repeat)
-			fprintf(logf, "  repeated %d times\n", repeat+1);
-
-		time_t now;
-		time(&now);
-		fprintf(logf, "----- Closed %s", ctime(&now));
-		fclose(logf);
-		logf = 0;
-		last_msg[0] = 0;
-		repeat = 0;
-	}
 }
 
 void cpu_deinit(void)
