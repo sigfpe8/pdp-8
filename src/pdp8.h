@@ -112,6 +112,7 @@ extern BIT CIF_delay;/* Delay ION until next JMP/JMS */
 extern unsigned long long IREQ;	/* Interrupt request */
 
 extern WORD trace;	/* Trace execution? */
+extern WORD BP_NUM;	// Active breakpoint number
 
 /* Configuration */
 extern BIT HAVE_EAE;/* Extended arithmetic element */
@@ -120,7 +121,7 @@ extern BIT HAVE_EMEM;/* Extended memory (> 4K) */
 
 /* Primary memory */
 #define	MAXMEM	4096	/* 4K words */
-extern size_t memsize;
+extern size_t memwords;
 extern WORD *MP;
 
 /* Used by the disassembler to represent an instruction */

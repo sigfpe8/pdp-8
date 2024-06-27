@@ -35,6 +35,7 @@ BIT CIF_delay;	// Delay ION until next JMP/JMS
 
 // Auxiliary registers 
 WORD THISPC;	// Current PC before it's incremented
+WORD BP_NUM;	// Active breakpoint number
 
 // Interrupt request: 64 bits, 1 bit per device
 unsigned long long IREQ;
@@ -47,7 +48,7 @@ BIT HAVE_EMEM;	/* Extended memory (> 4K) */
 
 /* Primary memory */
 WORD *MP;
-size_t memsize;	/* # of words */
+size_t memwords;/* # of words */
 int nfields;	/* # of fields */
 
 static void input_output(void);
@@ -135,6 +136,10 @@ void cpu_run(
 		case 7:	/* OPR - Operate */
 			operate();
 			break;
+		}
+		if (BP_NUM) {	// Are we leaving a breakpoint?
+			MP[THISPC] = HALT; // Yes, restore the HALT
+			BP_NUM = 0;
 		}
 		if (trace)
 			con_trace(THISPC, IR);
@@ -529,13 +534,13 @@ void cpu_init(size_t kwords)
 {
 	size_t i;
 
-	memsize = kwords * 1024;
+	memwords = kwords * 1024;
 	nfields = kwords / 4;
-	MP = (WORD *)malloc(memsize * sizeof(WORD));
+	MP = (WORD *)malloc(memwords * sizeof(WORD));
 	if (kwords > 4) HAVE_EMEM = 1;
 
 	/* Fill memory with halt instructions */
-	for (i = 0; i < memsize; ++i)
+	for (i = 0; i < memwords; ++i)
 		MP[i] = HALT;
 
 	/* Initialize registers */

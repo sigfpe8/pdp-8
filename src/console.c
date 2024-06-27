@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <assert.h>
 
 #include "pdp8.h"
 #include "console.h"
@@ -13,24 +14,29 @@ extern void inline_asm(WORD addr);
 /* Virtual Console */
 #define MAXARGS	10
 
-static int cont(int argc, char *argv[]);
-static int deposit(int argc, char *argv[]);
-static int examine(int argc, char *argv[]);
-static int help(int argc, char *argv[]);
-static int load(int argc, char *argv[]);
-static int make_argv(char *line, char **argv);
-static int octal_args(int argc, char *argv[], WORD args[], int minargs, int maxargs);
+static int  bp_check(WORD addr);
+static int  bp_clear(int argc, char *argv[]);
+static int  bp_list(int argc, char *argv[]);
+static int  bp_set(int argc, char *argv[]);
+static void con_trace_next(WORD addr, WORD code);
+static int  cont(int argc, char *argv[]);
+static int  deposit(int argc, char *argv[]);
+static int  examine(int argc, char *argv[]);
+static int  help(int argc, char *argv[]);
+static int  load(int argc, char *argv[]);
+static int  make_argv(char *line, char **argv);
+static int  octal_args(int argc, char *argv[], WORD args[], int minargs, int maxargs);
 //static void print_argv(int argc, char *argv[]);
-static int quit(int argc, char *argv[]);
-static int run(int argc, char *argv[]);
-static int set_acc(int argc, char *argv[]);
-static int set_link(int argc, char *argv[]);
-static int set_log(int argc, char *argv[]);
+static int  quit(int argc, char *argv[]);
+static int  run(int argc, char *argv[]);
+static int  set_acc(int argc, char *argv[]);
+static int  set_link(int argc, char *argv[]);
+static int  set_log(int argc, char *argv[]);
 static void set_signals(void);
-static int set_swt(int argc, char *argv[]);
-static int set_trace(int argc, char *argv[]);
-static int show_regs(int argc, char *argv[]);
-static int single_step(int argc, char *argv[]);
+static int  set_swt(int argc, char *argv[]);
+static int  set_trace(int argc, char *argv[]);
+static int  show_regs(int argc, char *argv[]);
+static int  single_step(int argc, char *argv[]);
 static void sig_handler(int sig);
 
 typedef struct {
@@ -41,6 +47,9 @@ typedef struct {
 } Command;
 
 Command cmdtable[] = {
+	{ "bc",		"<bp #>",				"Clear breakpoint",		bp_clear	},
+	{ "bl",		"",						"List breakpoints",		bp_list		},
+	{ "bp",		"<addr>",				"Set breakpoint",		bp_set		},
 	{ "continue","",					"Continue",				cont		},
 	{ "deposit","<addr>",				"Deposit memory",		deposit		},
 	{ "examine","<addr> [<count>]",		"Examine memory", 		examine,	},
@@ -63,6 +72,16 @@ static Command *find_command(char *name);
 
 static FILE *tracef;	/* Trace file pointer */
 static size_t traceb;	/* # of bytes used by trace file */
+
+#define	MAXBREAKPOINTS	10
+
+typedef struct {
+	WORD	addr;		// Address of breakpoint
+	WORD	inst;		// Original instruction
+} BreakPoint;
+
+BreakPoint bptable[MAXBREAKPOINTS];
+int nBreakPoints;
 
 void console(void)
 {
@@ -140,15 +159,15 @@ void con_trace(WORD addr, WORD code)
 }
 
 /* Show *next* instruction to be executed + current state */
-void con_trace_next(void)
+static void con_trace_next(WORD addr, WORD code)
 {
 	DINSTR inst;
 
-	inst.addr = PC;
-	inst.inst = MP[PC];
+	inst.addr = addr;
+	inst.inst = code;
 	cpu_disasm(&inst);
 
-	printf("PC=%05o [%04o] %s\t%s\n", PC, MP[PC], inst.name, inst.args);
+	printf("\r\nPC=%05o [%04o] %s\t%s\n", addr, code, inst.name, inst.args);
 	printf("         L=%d  AC=%04o  MQ=%04o  IF=%d  DF=%d  IB=%d  IEN=%d  IREQ=%08llx\r\n",
 		L, AC, MQ, IF>>12, DF>>12, IB>>12, IEN, IREQ);
 }
@@ -290,8 +309,8 @@ static int octal_args(int argc, char *argv[], WORD args[], int minargs, int maxa
 			printf("Argument must be an octal number: %s\n", pch);
 			return -1;
 		}
-		if (arg >= memsize) {
-			printf("Octal number is too big: 0%o (must be <= 0%lo)\n", arg, (memsize-1));
+		if (arg >= memwords) {
+			printf("Octal number is too big: 0%o (must be <= 0%lo)\n", arg, (memwords-1));
 			return -1;
 		}
 		args[i] = arg;
@@ -317,13 +336,147 @@ static void sig_handler(int sig)
 	if (sig == SIGINT) STOP = 1;
 }
 
+// bc <bp #>
+static int bp_clear(int argc, char *argv[])
+{
+	WORD args[MAXARGS+1];
+	int bn;
+	BreakPoint *bp;
+
+	if (octal_args(argc, argv, args, 1, 1) < 0)
+		return 0;
+
+	bn = args[1];
+
+	if (bn < 1 || bn > MAXBREAKPOINTS) {
+		printf("Valid breakpoint numbers are between 1 and %o\n", MAXBREAKPOINTS);
+		return 0;
+	}
+	bp = &bptable[bn-1];
+
+	if (!bp->addr) {
+		printf("Breakpoint %o does not exist\n", bn);
+		return 0;
+	}
+
+	// Restore original instruction
+	MP[bp->addr] = bp->inst;
+	// Mark slot as free
+	bp->addr = 0;
+	--nBreakPoints;
+	if (bn == BP_NUM)
+		BP_NUM = 0;
+
+	printf("Breakpoint %o cleared\n", bn);
+	return 0;
+}
+
+// bl
+static int bp_list(UNUSED int argc, UNUSED char *argv[])
+{
+	int bn;
+	BreakPoint *bp;
+
+	if (!nBreakPoints) {
+		printf("There are no breakpoints\n");
+		return 0;
+	}
+
+	printf("\n");
+	printf(" #   Addr  Inst\n");
+	printf("--  -----  ----\n");
+	for (bn = 1, bp = bptable; bn <= MAXBREAKPOINTS; ++bn, ++bp) {
+		if (bp->addr)
+			printf("%2o  %05o  %04o\n", bn, bp->addr, bp->inst);
+	}
+
+	return 0;
+}
+
+// bp <addr>
+static int bp_set(int argc, char *argv[])
+{
+	WORD args[MAXARGS+1];
+	int bn;
+	BreakPoint *bp;
+
+	if (octal_args(argc, argv, args, 1, 1) < 0)
+		return 0;
+
+	if (nBreakPoints == MAXBREAKPOINTS) {
+		printf("Maximum of %d breakpoints allowed\n", MAXBREAKPOINTS);
+		return 0;
+	}
+
+	WORD addr = args[1];
+
+	if (!addr) {
+		printf("Cannot set breakpoint at address 0\n");
+		return 0;
+	}
+
+	// Make sure a breakpoint does not already exist at this address
+	if (bp_check(addr)) {
+		printf("Breakpoint already exists at %05o\n", addr);
+		return 0;
+	}
+
+	// Find free breakpoint slot
+	for (bn = 1, bp = bptable; bn <= MAXBREAKPOINTS; ++bn, ++bp) {
+		// Zero addr means slot is free
+		if (!bp->addr)
+			break;	// found
+	}
+
+	assert(bn <= MAXBREAKPOINTS);
+
+	bp->addr = addr;
+	bp->inst = MP[addr];
+	MP[addr] = HALT;
+	++nBreakPoints;
+
+	printf("Breakpoint %o set at %05o\n", bn, addr);
+	return 0;
+}
+
+// If there's a breakpoint at addr, return its number
+// Otherwise return 0
+static int bp_check(WORD addr)
+{
+	int bn;
+	int nb;
+	BreakPoint *bp;
+
+	bn = 1;
+	bp = bptable;
+	nb = nBreakPoints;	// Only check this many breakpoints
+
+	while (nb && bn <= MAXBREAKPOINTS) {
+		if (bp->addr) {	// Valid slot?
+			if (bp->addr == addr)
+				return bn;	// Found a breakpoint at addr
+			--nb;
+		}
+		++bn;
+		++bp;
+	}
+
+	return 0;	// No breakpoint found
+}
+
 /* continue */
 static int cont(UNUSED int argc, UNUSED char *argv[])
 {
 	cpu_run(PC, 0);
 
 	if (!RUN && (IR == HALT)) {
-		printf("\n\nHALT @ %05o  L=%d  AC=%04o\n",PC-1,L,AC);
+		if ((BP_NUM = bp_check(PC-1))) {
+			--PC;
+			MP[PC] = bptable[BP_NUM-1].inst;	// Restore original instruction
+			printf("\nBreakpoint %o @ %05o\n", BP_NUM, PC);
+			con_trace_next(PC,MP[PC]);
+		} else
+			printf("\n\nHALT @ %05o  L=%d  AC=%04o\n",PC-1,L,AC);
 	}
 
 	tty_exit();
@@ -351,6 +504,7 @@ static int examine(int argc, char *argv[])
 	size_t count;
 	DINSTR inst;
 	FILE *out;
+	int bn;
 	WORD args[MAXARGS+1];
 
 	if (argc == 4) {
@@ -370,18 +524,25 @@ static int examine(int argc, char *argv[])
 	if (args[0] > 0) addr = args[1];
 	else addr = 0;
 
-	if (addr + count > memsize) count = memsize - addr;
+	if (addr + count > memwords) count = memwords - addr;
 	if (!count) count = 1;
 
 	fprintf(out,"\n");
 
 	while (count--) {
 		inst.addr = addr;
-		inst.inst = MP[addr];
+		if ((bn = bp_check(addr)))		// Is there a breakpoint here?
+			inst.inst = bptable[bn-1].inst;	// Yes, show original instruction
+		else
+			inst.inst = MP[addr];			// No, show current instruction
 		cpu_disasm(&inst);
-		fprintf(out, "%05o:%s %04o  %s  %s%s%s\n", addr, (addr == PC ? ">" : " "),
-			MP[addr], inst.ascii,
-			inst.name, (strlen(inst.name) > 8 ? "" : "\t"), inst.args);
+		fprintf(out, "%05o:%s%s%04o  %s  %s%s%s\n",
+			addr,
+			(addr == PC ? ">" : " "),
+			(bn ? "*" : " "),
+			inst.inst, inst.ascii, inst.name,
+			(strlen(inst.name) > 8 ? "" : "\t"),
+			inst.args);
 		++addr;
 	}
 
@@ -582,7 +743,13 @@ static int run(int argc, char *argv[])
 	cpu_run(args[1], 0);
 
 	if (!RUN && (IR == HALT)) {
-		printf("\n\nHALT @ %05o  L=%d  AC=%04o\n",PC-1,L,AC);
+		if ((BP_NUM = bp_check(PC-1))) {
+			--PC;
+			MP[PC] = bptable[BP_NUM-1].inst;	// Restore original instruction
+			printf("\nBreakpoint %o @ %05o\n", BP_NUM, PC);
+			con_trace_next(PC,MP[PC]);
+		} else
+			printf("\n\nHALT @ %05o  L=%d  AC=%04o\n",PC-1,L,AC);
 	}
 
 	tty_exit();
@@ -646,8 +813,22 @@ static int set_swt(int argc, char *argv[])
 /* si */
 static int single_step(UNUSED int argc, UNUSED char *argv[])
 {
+	// If the instruction we're about to execute is a breakpoint,
+	// replace it with the original instruction
+	if ((BP_NUM = bp_check(PC)))
+		MP[PC] = bptable[BP_NUM-1].inst;
+
 	cpu_run(PC, 1);
-	con_trace_next();
+
+	int bn;
+	WORD inst; 
+
+	if ((bn = bp_check(PC)))		// If next instruction is a breakpoint
+		inst = bptable[bn-1].inst;	// Show original instruction, not HLT
+	else
+		inst = MP[PC];
+
+	con_trace_next(PC,inst);
 
 	return 0;
 }
