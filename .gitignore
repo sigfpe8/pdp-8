@@ -1,3 +1,4 @@
-*.o
 pdp8
+build/
+images/
 xfiles/
