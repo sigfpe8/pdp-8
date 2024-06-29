@@ -832,6 +832,7 @@ int load_bin(FILE *inp, FILE *out, FILE *err)
 				fprintf(out, "%05o:  %04o  %s  %s %s\n",
 					addr, code, inst.ascii, inst.name, inst.args);
 			}
+	
 			MP[addr] = code;
 			++addr;
 			++nlocs;
@@ -847,30 +848,59 @@ int load_bin(FILE *inp, FILE *out, FILE *err)
 	return 0;
 }
 
-int load_rim(FILE *inp, UNUSED FILE *out, FILE *err)
+int load_rim(FILE *inp, FILE *out, FILE *err)
 {
 	int byte1, byte2;
 	int addr;
 	int code;
+	int first = MAXMEM;
+	int last = 0;
+	int nlocs = 0;
 
 	do {
 		byte1 = fgetc(inp);
 	} while (byte1 == 0x80);
 
 	while (byte1 != 0x80 && byte1 != 0x9a && byte1 != EOF) {
+		if (!(byte1 & 0x40)) {
+			fprintf(err, "Invalid initial byte for address: %02x\n", byte1);
+			return 0;
+		}
 		byte2 = fgetc(inp);
+		if (byte1 & 0x80 || byte2 & 0xC0) {
+			fprintf(err, "Invalid byte in address word (%02x,%02x)\n", byte1, byte2);
+			return 0;
+		}
 		addr = ((byte1 & 0x3F) << 6) | byte2;
 
 		byte1 = fgetc(inp);
 		byte2 = fgetc(inp);
+		if (byte1 & 0xC0 || byte2 & 0xC0) {
+			fprintf(err, "Invalid byte in code word (%02x,%02x)\n", byte1, byte2);
+			return 0;
+		}
 		code = (byte1 << 6) | byte2;
 
-		fprintf(err, "%04o  %04o\n", addr, code);
+		if (out) {	// Disassemble to out?
+			DINSTR inst;
+			inst.addr = addr;
+			inst.inst = code;
+			cpu_disasm(&inst);
+			fprintf(out, "%05o:  %04o  %s  %s %s\n",
+				addr, code, inst.ascii, inst.name, inst.args);
+		}
+
 		MP[addr] = code;
+		if (addr < first) first = addr;
+		if (addr > last) last = addr;
+		++nlocs;
 		byte1 = fgetc(inp);
 	}
 
 	while (byte1 == 0x80) byte1 = fgetc(inp);
+
+	fprintf(err,"Read %d locations\n", nlocs);
+	fprintf(err, "Addresses: %04o-%04o\n", first, last);
 
 	return 0;
 }
