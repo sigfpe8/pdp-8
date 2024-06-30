@@ -51,6 +51,9 @@ WORD *MP;
 size_t memwords;/* # of words */
 int nfields;	/* # of fields */
 
+int keyb_delay;
+#define	KEYB_DELAY	1000	// Check keyboard after so many instructions
+
 static void input_output(void);
 static void operate(void);
 static void skip_group(void);
@@ -60,8 +63,6 @@ void cpu_run(
 	WORD addr,	/* Initial address */
 	WORD count)	/* Number of instructions to run (0=until HLT) */
 {
-	int keyb_delay;
-#define	KEYB_DELAY	100		// Check keyboard every 100 instructions
 
 	PC = addr;
 	RUN = 1;
@@ -146,7 +147,7 @@ void cpu_run(
 		}
 		if (count && !--count)
 			RUN = 0;
-		if (!--keyb_delay) {
+		if (keyb_delay && !--keyb_delay) {
 			tty_keyb_get_flag(3);
 			tty_out_set_flag(4,1);
 			keyb_delay = KEYB_DELAY;
@@ -335,6 +336,7 @@ static void input_output(void)
 		case 6: // KRB = 6036
 			// Clear AC, read keyboard buffer, clear keyboard flags
 			AC = tty_keyb_inp1(dev);
+			keyb_delay = KEYB_DELAY;
 			break;
 		case 7: // ??? = 6037
 			log_invalid();

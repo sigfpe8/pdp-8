@@ -11,6 +11,7 @@ extern int	tty_out_get_flag(int dev);
 extern int	tty_out_set_flag(int dev, int flag);
 
 /* Keyboard input */
+extern void tty_keyb_assign(char* fname);
 extern int	tty_keyb_wait1(int dev);
 extern int	tty_keyb_timed_wait1(int dev);
 extern int	tty_keyb_get_flag(int dev);

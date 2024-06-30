@@ -14,6 +14,7 @@ extern void inline_asm(WORD addr);
 /* Virtual Console */
 #define MAXARGS	10
 
+static int  assign(int argc, char *argv[]);
 static int  bp_check(WORD addr);
 static int  bp_clear(int argc, char *argv[]);
 static int  bp_list(int argc, char *argv[]);
@@ -47,6 +48,7 @@ typedef struct {
 } Command;
 
 Command cmdtable[] = {
+	{ "assign",	"<dev> <file>",			"Assign file to device",assign		},
 	{ "bc",		"<bp #>",				"Clear breakpoint",		bp_clear	},
 	{ "bl",		"",						"List breakpoints",		bp_list		},
 	{ "bp",		"<addr>",				"Set breakpoint",		bp_set		},
@@ -871,3 +873,37 @@ static int set_trace(int argc, char *argv[])
 	return 0;
 }
 
+// assign <dev> <file>
+static int assign(int argc, char *argv[])
+{
+	WORD args[MAXARGS+1];
+
+	if (argc != 3) {
+		printf("Invalid number of arguments\n");
+		printf("assign <dev> <file>\n");
+		return 0;
+	}
+
+	char *fname = argv[2];
+	--argc;
+
+	if (octal_args(argc, argv, args, 1, 1) < 0)
+		return 0;
+
+	int dev = args[1];
+	if (dev < 0 || dev > 077) {
+		printf("Device numbers must be between 00 and 77 octal\n");
+		return 0;
+	}
+
+	switch (dev) {
+	case 003:	// Console keyboard (TTY) / low speed paper tape reader
+		tty_keyb_assign(fname);
+		break;
+	default:
+		printf("Device %02o not supported\n", dev);
+		break;
+	}
+
+	return 0;
+}

@@ -1,3 +1,4 @@
+#include <fcntl.h>
 #include <stdio.h>
 #include <termios.h>
 #include <unistd.h>
@@ -12,8 +13,12 @@ extern void cpu_stop(void);
 static struct termios orig_termios;
 static struct termios asr33_termios;
 static char keyb_buffer;
-static int keyb_flag;	/* 1 if keyb_buffer has a valid char */
-static int tty_flag;	/* 1 if teleprinter is done outputing a character */
+static int keyb_flag;	// 1 if keyb_buffer has a valid char
+static int tty_flag;	// 1 if teleprinter is done outputing a character
+static int keyb_fd ;	// Keyboard file descriptor
+static int keyb_real;	// 1 if real keyboard, 0 if other file
+
+static int tty_keyb_read(int dev);
 
 static void tty_asr33_mode(int mode);
 
@@ -39,6 +44,8 @@ static void tty_asr33_mode(int mode);
 		the simulator can fall back to these basic calls, which
 		use mode 2 (no wait):
 
+	  3 - Read 0 or 1 character, timeout = 0.5 sec (raw: VMIN=0, VTIME=5)
+
 		tty_keyb_getflag() (returns 1 if a character is available)
 		tty_keyb_inp1() (returns whatever is in the keyb buffer)
 */
@@ -46,11 +53,11 @@ static int	asr33_mode;
 
 void tty_init(void)
 {
-	/* Save current settings */
-	if (tcgetattr(0, &orig_termios) == -1)	/* stdin */
+	// Save current settings
+	if (tcgetattr(0, &orig_termios) == -1)	// stdin
 		log_error(errno, "tcgetattr");
 
-	/* Prepare raw mode to emulate ASR33 */
+	// Prepare raw mode to emulate ASR33
 	asr33_termios = orig_termios;
 	asr33_termios.c_iflag &= ~(BRKINT | ICRNL | INPCK | ISTRIP | IXON);
 	asr33_termios.c_oflag &= ~(OPOST);
@@ -60,20 +67,22 @@ void tty_init(void)
 
 	keyb_buffer = 0;
 	keyb_flag = 0;
+	keyb_fd = 0;	// stdin
+	keyb_real = 1;	// TODO: check if istty(0)
 }
 
 static void tty_asr33_mode(int mode)
 {
 	switch (mode) {
-	case 1:	/* Read 1 char (blocking, no timeout). VMIN=1, VTIME=0 */
+	case 1:	// Read 1 char (blocking, no timeout). VMIN=1, VTIME=0
 		asr33_termios.c_cc[VMIN] = 1;
 		asr33_termios.c_cc[VTIME] = 0;
 		break;
-	case 2:	/* Read 0 or 1 char (non-blocking). VMIN=0, VTIME=0 */
+	case 2:	// Read 0 or 1 char (non-blocking). VMIN=0, VTIME=0
 		asr33_termios.c_cc[VMIN] = 0;
 		asr33_termios.c_cc[VTIME] = 0;
 		break;
-	case 3:	/* Read 0 or 1 char (blocking, timeout = 1 sec), VMIN=0, VTIME=1 */
+	case 3:	// Read 0 or 1 char (blocking, timeout = 0.5 sec), VMIN=0, VTIME=5
 		asr33_termios.c_cc[VMIN] = 0;
 		asr33_termios.c_cc[VTIME] = 5;
 		break;
@@ -86,7 +95,7 @@ static void tty_asr33_mode(int mode)
 
 void tty_exit(void)
 {
-	if (asr33_mode) {
+	if (keyb_real && asr33_mode) {
 		if (tcsetattr(0, TCSAFLUSH, &orig_termios) == -1)
 			log_error(errno, "tcsetattr");
 
@@ -101,66 +110,69 @@ void tty_out1(int dev, int chr)
 	buf = chr;
 	write(1, &buf, 1);
 	tty_flag = 1;
-	cpu_ireq(dev, 1);	/* Request interrupt */
+	cpu_ireq(dev, 1);	// Request interrupt
 }
 
-/* Set teleprinter flag to 0/1 */
-/* Return old flag */
+// Set teleprinter flag to 0/1
+// Return old flag
 int tty_out_set_flag(int dev, int flag)
 {
 	int old_flag = tty_flag;
 
 	tty_flag = flag;
-	cpu_ireq(dev, flag);	/* Raise/clear int request */
+	cpu_ireq(dev, flag);	// Raise/clear int request
 	return old_flag;
 }
 
-/* Get teleprinter flag */
+// Get teleprinter flag
 int tty_out_get_flag(UNUSED int dev)
 {
 	return tty_flag;
 }
 
-/* Wait for 1 character to be pressed */
-int tty_keyb_wait1(int dev)
+// Assign the keyboard to a file
+void tty_keyb_assign(char* fname)
 {
-//printf("tty_keyb_wait1: keyb_flag=%d\r\n",keyb_flag);
-	if (keyb_flag) return 1;
-	if (asr33_mode != 1) tty_asr33_mode(1);
-	if (read(0, &keyb_buffer, 1) == 1) {
-		keyb_flag = 1;
-		if (keyb_buffer == CTRL_C)
-			cpu_stop();
-		cpu_ireq(dev, 1);	/* Request interrupt */
-		return 1;
+	int fd;
+	
+	if ((fd = open(fname, O_RDONLY)) < 0) {
+		printf("Could not open %s to redirect keyboard input\n", fname);
+		return;
 	}
-	keyb_flag = 0;
-	cpu_ireq(dev, 0);	/* Clear interrupt request */
-	return 0;
+
+	keyb_fd = fd;
+	keyb_real = 0;
+	tty_keyb_read(3);	// First character
 }
 
-/* Wait for 1 character to be pressed, 1s timeout */
+// Wait for 1 character to be pressed
+int tty_keyb_wait1(int dev)
+{
+	if (keyb_flag) return 1;
+	if (keyb_real && asr33_mode != 1) tty_asr33_mode(1);
+	return tty_keyb_read(dev);
+}
+
+// Get keyboard flag (no-wait)
+int tty_keyb_get_flag(int dev)
+{
+	if (keyb_flag) return 1;
+	if (keyb_real && asr33_mode != 2) tty_asr33_mode(2);
+	return tty_keyb_read(dev);
+}
+
+// Wait for 1 character to be pressed, 0.5s timeout
 int tty_keyb_timed_wait1(int dev)
 {
 	if (keyb_flag) return 1;
-	if (asr33_mode != 3) tty_asr33_mode(3);
-	if (read(0, &keyb_buffer, 1) == 1) {
-		keyb_flag = 1;
-		if (keyb_buffer == CTRL_C)
-			cpu_stop();
-		cpu_ireq(dev, 1);	/* Request interrupt */
-		return 1;
-	}
-	keyb_flag = 0;
-	cpu_ireq(dev, 0);	/* Clear interrupt request */
-	return 0;
+	if (keyb_real && asr33_mode != 3) tty_asr33_mode(3);
+	return tty_keyb_read(dev);
 }
 
-/* Set keyboard flag to 0/1 */
-/* Return old flag */
+// Set keyboard flag to 0/1
+// Return old flag
 int tty_keyb_set_flag(int dev, int flag)
 {
-//printf("tty_keyb_set_flag(%d): was keyb_flag=%d\r\n",flag, keyb_flag);
 	int old_flag = keyb_flag;
 
 	keyb_flag = flag;
@@ -168,42 +180,42 @@ int tty_keyb_set_flag(int dev, int flag)
 	return old_flag;
 }
 
-/* Get keyboard flag (no-wait) */
-int tty_keyb_get_flag(int dev)
+// Read 1 character and clear flag (no-wait)
+int tty_keyb_inp1(int dev)
 {
-//printf("tty_keyb_get_flag(): keyb_flag=%d\r\n",keyb_flag);
-	if (keyb_flag) return 1;
-	if (asr33_mode != 2) tty_asr33_mode(2);
-	if (read(0, &keyb_buffer, 1) == 1) {
+	if (keyb_flag) {
+		keyb_flag = 0;
+		cpu_ireq(dev, 0);	// Clear interrupt request
+		return keyb_buffer | 0200;
+	}
+	if (keyb_real && asr33_mode != 2) tty_asr33_mode(2);
+	return tty_keyb_read(dev);
+}
+
+// Low level read 1 character
+static int tty_keyb_read(int dev)
+{
+	int rc;
+
+	if ((rc = read(keyb_fd, &keyb_buffer, 1) == 1)) {
 		keyb_flag = 1;
 		if (keyb_buffer == CTRL_C)
 			cpu_stop();
-		cpu_ireq(dev, 1);	/* Request interrupt */
+		if (keyb_buffer == 10)
+			keyb_buffer = 13;	// \n --> \r
+		cpu_ireq(dev, 1);		// Request interrupt
 		return 1;
+	} else if (rc == 0) {		// EOF
+		if (keyb_fd) {			// If not stdin, close and reassign to 0
+			close(keyb_fd);
+			keyb_fd = 0;
+			keyb_real = 1;
+		}
+	} else {					// Possibly error
+		if (errno != EAGAIN)	// EWOULDBLOCK?
+			log_error(errno, "read");
 	}
 	keyb_flag = 0;
-	cpu_ireq(dev, 0);	/* Clear interrupt request */
-	return 0;
-}
-
-/* Read 1 character and clear flag (no-wait) */
-int tty_keyb_inp1(int dev)
-{
-//printf("tty_keyb_inp1: keyb_flag=%d\r\n",keyb_flag);
-	if (keyb_flag) {
-		keyb_flag = 0;
-		cpu_ireq(dev, 0);	/* Clear interrupt request */
-		return keyb_buffer | 0200;
-	}
-	if (asr33_mode != 2) tty_asr33_mode(2);
-	if (read(0, &keyb_buffer, 1) == 1) {
-		keyb_flag = 0;
-		if (keyb_buffer == CTRL_C)
-			cpu_stop();
-		cpu_ireq(dev, 0);	/* Clear interrupt request */
-		return keyb_buffer | 0200;
-	}
-	keyb_flag = 0;
-	cpu_ireq(dev, 0);	/* Clear interrupt request */
+	cpu_ireq(dev, 0);			// Clear interrupt request
 	return 0;
 }
