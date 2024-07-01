@@ -1,6 +1,6 @@
 
 OBJDIR := build
-OBJS := $(addprefix $(OBJDIR)/, console.o log.o main.o pdp8cpu.o pdp8asm.o tty.o)
+OBJS := $(addprefix $(OBJDIR)/, console.o log.o main.o papertape.o pdp8cpu.o pdp8asm.o tty.o)
 
 CC := clang
 CFLAGS := -std=c99 -pedantic-errors -Wall -Wextra -g
@@ -17,6 +17,8 @@ console.o: console.c console.h pdp8.h
 log.o: log.c log.h pdp8.h
 
 main.o:	main.c pdp8.h
+
+papertape.o: papertape.c papertabe.h pdp8.h
 
 pdp8asm.o: pdp8asm.c pdp8.h
 

@@ -7,6 +7,7 @@
 #include "pdp8.h"
 #include "console.h"
 #include "log.h"
+#include "papertape.h"
 #include "tty.h"
 
 // CPU state
@@ -43,8 +44,9 @@ unsigned long long IREQ;
 WORD trace;	// Trace execution?
 
 /* Configuration */
-BIT HAVE_EAE;	/* Extended arithmetic element */
-BIT HAVE_EMEM;	/* Extended memory (> 4K) */
+BIT HAVE_EAE;		// Extended arithmetic element
+BIT HAVE_EMEM;		// Extended memory (> 4K)
+BIT HAVE_IOMEC_PPT;	// IOmec paper tape reader/punch 
 
 /* Primary memory */
 WORD *MP;
@@ -302,8 +304,88 @@ static void input_output(void)
 		}
 		break;
 	case 001:	// High speed paper tape reader
+		switch(fun) {
+		case 0: // RPE = 6010
+			// Reader Punch Enable
+			if (HAVE_IOMEC_PPT)
+				ppt_reader_punch_ien(1);
+			else
+				log_invalid();
+			break;
+		case 1: // RSF = 6011
+			// Reader Skip if Flag
+			if (ppt_reader_get_flag())
+				PC_INC();
+			break;
+		case 2: // RRB = 6012
+			// Read Reader Buffer, clear the reader flag
+			AC |= ppt_reader_get_buffer();
+			break;
+		case 3: // RRB RSF= 6013 (IOmec only)
+			log_invalid();
+			break;
+		case 4: // RFC = 6014
+			// Reader Fetch Character
+			// Clear and start reading next character from tape
+			ppt_reader_clear_flag();
+			break;
+		case 5: // RFC RSF = 6015 (IOmec only)
+			// IOmec: Skip if End-Of-Tape flag
+			if (HAVE_IOMEC_PPT) {
+				if (ppt_reader_get_eot())
+					PC_INC();
+			} else
+				log_invalid();
+			break;
+		case 6: // RRB RFC = 6016
+			// Read Reader Buffer and start reading next character from tape
+			AC |= ppt_reader_get_buffer();
+			ppt_reader_clear_flag();
+			break;
+		case 7: // RFC RRB RSF = 6017 (IOmec only)
+			// IOmec: clear end-of-tape flag
+			if (HAVE_IOMEC_PPT)
+				ppt_reader_clear_eot();
+			else
+				log_invalid();
+		}
+		break;
 	case 002:	// High speed paper tape punch
-		log_invalid();
+		switch(fun) {
+		case 0: // PCE = 6020
+			// Punch Clear Enable
+			if (HAVE_IOMEC_PPT)
+				ppt_reader_punch_ien(0);
+			else
+				log_invalid();
+			break;
+		case 1: // PSF = 6021
+			// Punch Skip if Flag
+			if (ppt_punch_get_flag())
+				PC_INC();
+			break;
+		case 2: // PCF = 6022
+			// Punch Clear Flag
+			ppt_punch_clear_flag();
+			break;
+		case 3: // 6023
+			log_invalid();
+			break;
+		case 4: // PPC = 6024
+			// Punch Put Character
+			ppt_punch_putchar(AC & 0xFF);
+			break;
+		case 5: // 6025
+			log_invalid();
+			break;
+		case 6: // PLS = 6026
+			// Punch Load Sequence
+			ppt_punch_clear_flag();
+			ppt_punch_putchar(AC & 0xFF);
+			break;
+		case 7: // 6027
+			log_invalid();
+		}
 		break;
 	case 003:	// Console keyboard (TTY) / low speed paper tape reader
 		switch(fun) {

@@ -116,8 +116,9 @@ extern WORD BP_NUM;	// Active breakpoint number
 extern WORD THISPC;	// Current PC before it's incremented
 
 /* Configuration */
-extern BIT HAVE_EAE;/* Extended arithmetic element */
-extern BIT HAVE_EMEM;/* Extended memory (> 4K) */
+extern BIT HAVE_EAE;		// Extended arithmetic element
+extern BIT HAVE_EMEM;		// Extended memory (> 4K)
+extern BIT HAVE_IOMEC_PPT;	// IOmec paper tape reader/punch 
 
 
 /* Primary memory */

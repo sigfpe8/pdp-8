@@ -897,6 +897,12 @@ static int assign(int argc, char *argv[])
 	}
 
 	switch (dev) {
+	case 001:	// High speed paper tape reader
+		ppt_reader_assign(fname);
+		break;
+	case 002:	// High speed paper tape punch
+		ppt_punch_assign(fname);
+		break;
 	case 003:	// Console keyboard (TTY) / low speed paper tape reader
 		tty_keyb_assign(fname);
 		break;
