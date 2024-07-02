@@ -7,6 +7,7 @@
 
 #include "pdp8.h"
 #include "console.h"
+#include "papertape.h"
 #include "tty.h"
 
 extern void inline_asm(WORD addr);

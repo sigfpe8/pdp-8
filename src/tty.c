@@ -197,25 +197,25 @@ static int tty_keyb_read(int dev)
 {
 	int rc;
 
-	if ((rc = read(keyb_fd, &keyb_buffer, 1) == 1)) {
+	if ((rc = read(keyb_fd, &keyb_buffer, 1)) == 1) {
 		keyb_flag = 1;
 		if (keyb_buffer == CTRL_C)
 			cpu_stop();
 		if (keyb_buffer == 10)
 			keyb_buffer = 13;	// \n --> \r
-		cpu_ireq(dev, 1);		// Request interrupt
-		return 1;
 	} else if (rc == 0) {		// EOF
+		keyb_flag = 0;
 		if (keyb_fd) {			// If not stdin, close and reassign to 0
 			close(keyb_fd);
 			keyb_fd = 0;
 			keyb_real = 1;
 		}
 	} else {					// Possibly error
+		keyb_flag = 0;
 		if (errno != EAGAIN)	// EWOULDBLOCK?
 			log_error(errno, "read");
 	}
-	keyb_flag = 0;
-	cpu_ireq(dev, 0);			// Clear interrupt request
-	return 0;
+
+	cpu_ireq(dev, keyb_flag);
+	return keyb_flag;
 }

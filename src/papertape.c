@@ -21,13 +21,14 @@ static void ppt_punch_write(int ch);
 void ppt_init(void)
 {
     ppt_ien = 0;
-    reader_eot = 1;
+
+    reader_fp = 0;
+    reader_eot = 0;
     reader_flag = 0;
     reader_buffer = 0;
-    reader_fp = 0;
 
-    punch_flag = 0;
     punch_fp = 0;
+    punch_flag = 0;
 }
 
 //
@@ -75,6 +76,7 @@ int  ppt_reader_get_flag(void)
 int  ppt_reader_get_buffer(void)
 {
     reader_flag = 0;
+    cpu_ireq(PPT_READER, 0);
     return reader_buffer;
 }
 
@@ -96,28 +98,31 @@ static void ppt_reader_read(void)
         return;
     }
 
-	reader_flag = 0;            // Assume no character available
-
-    if (HAVE_IOMEC_PPT && reader_eot)
+    if (HAVE_IOMEC_PPT && reader_eot) {
+    	reader_flag = 0;
+        if (ppt_ien)
+            cpu_ireq(PPT_READER, 0);
         return;
+    }
 
-	if ((ch = fgetc(reader_fp) != EOF)) {
+	if ((ch = fgetc(reader_fp)) != EOF) {
         // We have a character
 		reader_flag = 1;
         reader_buffer = ch == 10 ? 13 : ch; // \n --> \r
-        if (HAVE_IOMEC_PPT) {
-            if (ppt_ien)
-		        cpu_ireq(PPT_READER, 1);// Request interrupt
-        } else
-		    cpu_ireq(PPT_READER, 1);	// Request interrupt
 	} else {		                    // EOF or error
         // No character
+    	reader_flag = 0;
         if (feof(reader_fp))
             reader_eot = 1;
 	    else
 		    log_error(errno, "fgetc");
-        cpu_ireq(PPT_READER, 0);	        // Clear interrupt request
     }
+
+    if (HAVE_IOMEC_PPT) {
+        if (ppt_ien)
+            cpu_ireq(PPT_READER, reader_flag);
+    } else
+        cpu_ireq(PPT_READER, reader_flag);
 }
 
 //

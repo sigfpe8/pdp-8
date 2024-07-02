@@ -11,7 +11,7 @@ extern void ppt_reader_clear_flag(void);
 extern int  ppt_reader_get_buffer(void);
 extern int  ppt_reader_get_eot(void);
 extern int  ppt_reader_get_flag(void);
-extern void ppt_punch_asssign(char* fname);
+extern void ppt_punch_assign(char* fname);
 extern int  ppt_punch_get_flag(void);
 extern void ppt_punch_clear_flag(void);
 extern void ppt_punch_putchar(int ch);
