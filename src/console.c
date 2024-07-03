@@ -2,7 +2,7 @@
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
+#include <strings.h>
 #include <assert.h>
 
 #include "pdp8.h"
@@ -628,13 +628,13 @@ static int load(int argc, char *argv[])
 	}
 
 	if ((sep = strrchr(file_inp, '.')) && strlen(sep+1) < 5) {
-		if (!strcmp(sep+1,"asm8"))
+		if (!strcasecmp(sep+1,"asm8"))
 			ffmt = FILEFMT_ASM;
-		else if (!strcmp(sep+1,"bin"))
+		else if (!strcasecmp(sep+1,"bin") || !strcasecmp(sep+1,"pb"))
 			ffmt = FILEFMT_BIN;
-		else if (!strcmp(sep+1,"rim"))
+		else if (!strcasecmp(sep+1,"rim") || !strcasecmp(sep+1,"pm"))
 			ffmt = FILEFMT_RIM;
-		else if (!strcmp(sep+1,"txt"))
+		else if (!strcasecmp(sep+1,"txt"))
 			ffmt = FILEFMT_TXT;
 		else {
 			printf("Unknown file extension\n");
@@ -648,9 +648,9 @@ static int load(int argc, char *argv[])
 			memcpy(file_out, file_inp, len);
 		}
 	} else if ((sep = strrchr(file_inp, '-'))) {
-		if (!strcmp(sep+1,"pb"))
+		if (!strcasecmp(sep+1,"pb"))
 			ffmt = FILEFMT_BIN;
-		else if (!strcmp(sep+1,"pm"))
+		else if (!strcasecmp(sep+1,"pm"))
 			ffmt = FILEFMT_RIM;
 		else {
 			printf("Unknown file type\n");
