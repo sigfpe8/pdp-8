@@ -1,6 +1,6 @@
 # The PDP-8
 
-This is an old unfinished project of mine that had been dormant for a long time. Looking at it recently I decided to revive it and try to improve its functionality. My initial goal was, and still is, to be able to run the software Focal ("FOrmula CALculator") and perhaps, being a bit more ambitious, OS8, the time sharing operating system that ran on the PDP-8. Although the basic instruction set has been implemented, none of these goals have been achieved yet so this is still a work in progress.
+This is an old unfinished project of mine that had been dormant for a long time. Looking at it recently I decided to revive it and try to improve its functionality. My initial goal was, and still is, to be able to run the software FOCAL ("FOrmula CALculator") and perhaps, being a bit more ambitious, OS/8, the disk operating system that ran on the PDP-8. OS/8 is not supported yet, but FOCAL runs fine.  Instructions for playing with it and exploring some of its capabilities are [here](docs/focal.md).
 
 
 ## How to build and run the simulator
@@ -81,4 +81,5 @@ HALT @ 00203  L=0  AC=0000
 PC=00204> 
 ```
 
+The simulator has only been tested on macOS but should probably run without problems on any Unix/Linux system. Porting to Windows should require some work because of the I/O functions.
 
