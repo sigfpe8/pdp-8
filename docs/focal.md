@@ -1,11 +1,11 @@
 What is FOCAL?
 --------------
 
-FOCAL is a programming language and an interactive environment developed originally for the PDP-8 and later ported to other PDP systems, especially the PDP-11. It has some similarities with BASIC, which was also developed around the same time, in the mid 1960's. Wikipedia has a nice [article](https://en.wikipedia.org/wiki/FOCAL_(programming_language)) explaining its history and main features.
+FOCAL is a programming language and an interactive environment developed originally for the PDP-8 and later ported to other PDP systems, especially the PDP-11. It has some similarities with BASIC, which was also developed around the same time, in the mid to late 1960's. Wikipedia has a nice [article](https://en.wikipedia.org/wiki/FOCAL_(programming_language)) explaining its history and main features.
 
 Although BASIC can handle both numeric and character data (strings), FOCAL is more oriented to numeric calculations. You can think of it as a kind of programmable calculator on steroids. You can type in mathematical expressions that are immediatly evaluated (the *direct mode*) but you can also type in and edit programs to implement sophisticaded algorithms (the *indirect mode*).
 
-It is pretty amazing what those guys were able to achieve with such a spartan machine as the PDP-8! In just 4 Kwords they packed the language interpreter, floating-point math functions (all in software), drivers for the keyboard, printer and papertape, and still leave room for your program and data! Absolutely sensational! 
+It is pretty amazing what those guys were able to achieve with such a spartan machine as the PDP-8! In just 4 Kwords they packed the language interpreter, floating-point math functions (all in software), program line editor, drivers for the keyboard, printer and papertape, and still leave room for your program and data! Absolutely sensational! 
 
 Using FOCAL with the PDP-8 simulator
 ------------------------------------
