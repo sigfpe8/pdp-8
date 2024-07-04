@@ -106,8 +106,43 @@ void tty_exit(void)
 void tty_out1(int dev, int chr)
 {
 	char buf;
+/* 
+   For some reason I still don't understand, in FOCAL,1969 when you
+      TYPE #
+   with the intention of sending just a CR to the console, FOCAL 
+   acctually sends CR+FF (0x0D+0x0C or "\r\f"). For example, the
+   code
+      TYPE "ABC",#,"XYZ",!
+   should end up displaying only "XYZ" because after the CR this string
+   would overwrite the "ABC". However, what we see is
 
+	  ABC
+	  XYZ
+
+   This happens because terminal emulators nowadays don't always honor
+   '\f' (preferring an ANSI sequence instead to clear the screen) and
+   interpret it as a linefeed.
+
+   Interestingly, testing with FOCAL, 8/68 we see the expected result:
+
+      XYZ
+
+   Defining the constant FOCAL_CR_HACK below will provide a translation
+   from '\f' to '\r' so that CR+FF becomes CR+CR. This way FOCAL,1969
+   also works as expected. Maybe this could be a runtime flag, but for
+   now I'll leave it as a compile time option.
+
+   As a side note, it is curious to observe that MUMPS, a language that
+   was influenced by FOCAL, chose the character '#' to denote a form-feed
+   exactly like the FOCAL,1969 behavior (although the FOCAL manual says
+   it should be a CR).
+*/
+#define	FOCAL_CR_HACK
+#ifdef	FOCAL_CR_HACK
+	buf = chr == 0x0c ? 0x0d : chr;
+#else
 	buf = chr;
+#endif
 	write(1, &buf, 1);
 	tty_flag = 1;
 	cpu_ireq(dev, 1);	// Request interrupt
