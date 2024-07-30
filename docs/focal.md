@@ -57,6 +57,63 @@ C-FOCAL,1969
 
 Imagine that you are in 1969, in front of an ASR-33 teletype and you spent all the afternoon typing and editing your new FOCAL orbit calculator. You want to keep a copy of it before you go home. Of course, there are no disks yet, nor diskettes or pen drives, all you have is some unused paper tape. What do you do? You install the paper tape in the ASR-33 punch and type `W`, but not `<RETURN>` yet. Then you turn on the paper punch and type `<RETURN>`. FOCAL will send its version, say, "C-FOCAL,1969", and then all the lines of your program to the paper tape. The first line is a comment and will be ignored when the tape is loaded in the future, but it stays there as reminder of the version for which the program was written.
 
+Using FOCAL as a calculator
+---------------------------
+
+You can ask FOCAL to evaluate mathematical formulas with the usual arithmetic and trigonometric functions. However, FOCAL is not an expression-based language, but a statement-based (or command-based) language. This means that you cannot simply type an expression (a formula) and expect FOCAL to evaluate it. Instead, you have to use a command to request focal to display the value of the given expression. This is what the `TYPE` command is for. All commands in FOCAL can be (and usually are) abbreviated by its first letter. Also note that some versions accept lowercase letters for the commands but other versions don't so it's safer to stick with uppercase. For example:
+```
+*T 2+3
+=    5.0000*
+```
+
+Thee things to note here.
+
+1. FOCAL uses a default floating-point format to display the result. This can be changed (more later);
+
+2. The result is displayed to the right of a `=` sign. I don't think this can be changed;
+
+3. It does not automatically end with a new line. The `*` at the end is the next prompt.
+
+In order to add a new line after the result, use the `!` character as an argument to `TYPE`:
+```
+*T 3*4/2,!
+=    6.0000
+```
+
+The above command has two arguments, the expression `3*3/2` and the control character `!`, separated by a comma. Multiple `!` can be concatenated in order to indicate multiple new lines. Besides, `TYPE` also accepts text (strings) as arguments.
+```
+*T "VALUE ",300,!!,"15% ",300*0.15,!
+VALUE =  300.0000
+
+15% =   45.0000
+```
+
+Using variables
+---------------
+
+Variable names in FOCAL are restricted to two characters, the first one being an uppercase letter and the second one an uppercase letter, a digit (0-9) the single (`'`) or double quote (`"`) characters. This is very unusuall as programming languages go, but might be useful reminders if you are calculating with feet and inches or minutes and seconds.
+
+You assign a value to a variable with the `SET` command. Only numerical values are valid. Unfortunately FOCAL doesn't support character strings beyond displaying literal text with `TYPE`.
+```
+*S R=2.5
+*T "AREA ",3.1415*R*R,!
+AREA =   19.6344
+```
+
+The `FOR` command is the FOCAL way to express repetion or loops. It iterates the variable from the initial value to the last value using the middle argument as the increment. If the increment is missing, `1` is assumed. The command which is repeated in the context of the `FOR` comes after it in the same line but separated from it by a `;`.
+
+```
+*FOR R=1,0.5,5; TYPE "R ",R,"  AREA ",3.1415*R*R,!
+R =    1.0000  AREA =    3.1415
+R =    1.5000  AREA =    7.0684
+R =    2.0000  AREA =   12.5660
+R =    2.5000  AREA =   19.6344
+R =    3.0000  AREA =   28.2735
+R =    3.5000  AREA =   38.4834
+R =    4.0000  AREA =   50.2640
+R =    4.5000  AREA =   63.6154
+R =    5.0000  AREA =   78.5375
+```
 
 
 Playing Lunar Lander
